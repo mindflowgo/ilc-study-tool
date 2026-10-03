@@ -1,0 +1,212 @@
+<script lang="ts">
+  import { Upload, X, FileArchive, CheckCircle2, AlertCircle, Loader2, Plus } from 'lucide-svelte';
+
+  interface Props {
+    isOpen: boolean;
+    presetCourseId?: string;
+    onClose: () => void;
+    onUploaded: (courseId: string) => void;
+  }
+
+  let { isOpen, presetCourseId = '', onClose, onUploaded }: Props = $props();
+
+  let courseId = $state('');
+  let selectedFiles: File[] = $state([]);
+  let isDragging = $state(false);
+  let isUploading = $state(false);
+  let errorMessage = $state('');
+
+  $effect(() => {
+    if (presetCourseId) {
+      courseId = presetCourseId;
+    }
+  });
+
+  function handleFileSelect(e: Event) {
+    const target = e.target as HTMLInputElement;
+    if (target.files) {
+      selectedFiles = Array.from(target.files).filter((f) => f.name.endsWith('.zip'));
+    }
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    isDragging = false;
+    if (e.dataTransfer?.files) {
+      selectedFiles = Array.from(e.dataTransfer.files).filter((f) => f.name.endsWith('.zip'));
+    }
+  }
+
+  async function uploadFiles() {
+    if (!selectedFiles.length) {
+      errorMessage = 'Please select at least one .zip file.';
+      return;
+    }
+
+    isUploading = true;
+    errorMessage = '';
+
+    const formData = new FormData();
+    const finalCourseId = (courseId || presetCourseId).trim().toLowerCase() || 'course_' + Date.now();
+    formData.append('courseId', finalCourseId);
+
+    for (const file of selectedFiles) {
+      formData.append('files', file);
+    }
+
+    try {
+      const res = await fetch('/api/parse', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to upload and parse course archive.');
+      }
+
+      const data = await res.json();
+      selectedFiles = [];
+      onUploaded(finalCourseId);
+      onClose();
+    } catch (err: any) {
+      errorMessage = err?.message || 'Error uploading files.';
+    } finally {
+      isUploading = false;
+    }
+  }
+</script>
+
+{#if isOpen}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs">
+    <div
+      class="w-full max-w-md rounded-2xl bg-white border border-stone-200 shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150"
+    >
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-stone-100">
+        <div class="flex items-center space-x-2">
+          <div class="p-1.5 rounded-lg bg-stone-100 text-stone-700">
+            {#if presetCourseId}
+              <Plus class="w-4 h-4" />
+            {:else}
+              <Upload class="w-4 h-4" />
+            {/if}
+          </div>
+          <div>
+            <h2 class="text-sm font-semibold text-stone-900">
+              {presetCourseId ? `Add Chapters to ${presetCourseId.toUpperCase()}` : 'Upload Course Package'}
+            </h2>
+            <p class="text-[11px] text-stone-400">
+              {presetCourseId ? 'New chapters will be parsed and merged into this course.' : 'Ingest a course package of ILC lessons.'}
+            </p>
+          </div>
+        </div>
+        <button
+          onclick={onClose}
+          class="p-1 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition"
+        >
+          <X class="w-4 h-4" />
+        </button>
+      </div>
+
+      <!-- Course Identifier Input (only shown if not preset) -->
+      {#if !presetCourseId}
+        <div class="space-y-1.5">
+          <label for="course-id" class="text-xs font-medium text-stone-700">Course Identifier (e.g. clu3m, eng4u)</label>
+          <input
+            id="course-id"
+            type="text"
+            bind:value={courseId}
+            placeholder="clu3m"
+            class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
+          />
+        </div>
+      {:else}
+        <div class="p-2.5 rounded-lg bg-stone-50 border border-stone-200 text-xs text-stone-600 flex items-center justify-between">
+          <span class="font-medium text-stone-700">Target Course:</span>
+          <span class="font-mono uppercase font-bold text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200">
+            {presetCourseId}
+          </span>
+        </div>
+      {/if}
+
+      <!-- Drag & Drop Zone -->
+      <div
+        role="region"
+        aria-label="Course package drop zone"
+        ondragover={(e) => { e.preventDefault(); isDragging = true; }}
+        ondragleave={() => (isDragging = false)}
+        ondrop={handleDrop}
+        class="border-2 border-dashed rounded-xl p-6 text-center space-y-2 transition {isDragging ? 'border-stone-900 bg-stone-50' : 'border-stone-200 hover:border-stone-300'}"
+      >
+        <div class="mx-auto w-10 h-10 rounded-full bg-stone-50 border border-stone-200 flex items-center justify-center text-stone-400">
+          <FileArchive class="w-5 h-5" />
+        </div>
+        <div class="text-xs text-stone-600">
+          <label for="zip-files" class="font-semibold text-stone-900 hover:underline cursor-pointer">
+            Browse files
+          </label>
+          or drag & drop lesson .zip archives
+        </div>
+        <p class="text-[11px] text-stone-400">Select one or multiple ILC lesson zip packages</p>
+        <input
+          id="zip-files"
+          type="file"
+          multiple
+          accept=".zip"
+          onchange={handleFileSelect}
+          class="hidden"
+        />
+      </div>
+
+      <!-- File List -->
+      {#if selectedFiles.length > 0}
+        <div class="max-h-36 overflow-y-auto space-y-1 rounded-lg border border-stone-100 p-2 bg-stone-50/50">
+          {#each selectedFiles as f}
+            <div class="flex items-center justify-between text-[11px] text-stone-700 py-0.5">
+              <span class="truncate max-w-[260px]">{f.name}</span>
+              <span class="text-stone-400 font-mono text-[10px]">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <!-- Error message -->
+      {#if errorMessage}
+        <div class="flex items-center space-x-2 text-rose-600 text-xs bg-rose-50 border border-rose-100 p-2.5 rounded-lg">
+          <AlertCircle class="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      {/if}
+
+      <!-- Actions -->
+      <div class="flex items-center justify-between pt-2 border-t border-stone-100">
+        <span class="text-[11px] text-stone-400">
+          Existing notes are preserved.
+        </span>
+        <div class="flex items-center space-x-2">
+          <button
+            onclick={onClose}
+            disabled={isUploading}
+            class="px-3.5 py-1.5 rounded-lg border border-stone-200 text-xs text-stone-700 hover:bg-stone-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onclick={uploadFiles}
+            disabled={isUploading || selectedFiles.length === 0}
+            class="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+          >
+            {#if isUploading}
+              <Loader2 class="w-3.5 h-3.5 animate-spin" />
+              <span>Ingesting...</span>
+            {:else}
+              <Upload class="w-3.5 h-3.5" />
+              <span>{presetCourseId ? 'Add Chapters & Parse' : 'Ingest & Parse'}</span>
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}

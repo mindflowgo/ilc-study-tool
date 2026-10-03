@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Callout Styling */
+.callout {
+  border-left-width: 4px;
+  border-radius: 0.375rem;
+  padding: 1rem 1.25rem;
+  margin: 1.25rem 0;
+}
+
+.callout-note {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+  color: #1e3a8a;
+}
+
+.callout-tip {
+  border-color: #10b981;
+  background-color: #ecfdf5;
+  color: #064e3b;
+}
+
+.callout-important {
+  border-color: #8b5cf6;
+  background-color: #f5f3ff;
+  color: #4c1d95;
+}
+
+.callout-warning {
+  border-color: #f59e0b;
+  background-color: #fffbeb;
+  color: #78350f;
+}
+
+/* Collapsible suggested answers */
+details.suggested-answer {
+  border: 1px solid #e7e5e4;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  background-color: #fafaf9;
+  transition: all 0.2s ease-in-out;
+}
+
+details.suggested-answer[open] {
+  background-color: #ffffff;
+  border-color: #d6d3d1;
+}
+
+details.suggested-answer summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #44403c;
+  user-select: none;
+}
+
+details.suggested-answer summary:hover {
+  color: #1c1917;
+}
+
+/* CodeMirror customizations */
+.cm-editor {
+  height: 100% !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.875rem !important;
+}
+
+.cm-scroller {
+  line-height: 1.6 !important;
+  padding: 1rem 0 !important;
+}
+
+.cm-focused {
+  outline: none !important;
+}

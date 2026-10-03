@@ -1,0 +1,245 @@
+<script lang="ts">
+  import { QuestionParser, type ParsedQuiz, type QuizQuestion } from '$lib/parser/questionParser';
+  import CodeMirrorEditor from './CodeMirrorEditor.svelte';
+  import { CheckCircle2, XCircle, RotateCcw, Edit3, PlayCircle, HelpCircle, Award } from 'lucide-svelte';
+
+  interface Props {
+    testMarkdown: string;
+    onSaveMarkdown: (newMarkdown: string) => void;
+  }
+
+  let { testMarkdown, onSaveMarkdown }: Props = $props();
+
+  let viewMode: 'quiz' | 'raw' = $state('quiz');
+  let userAnswers: Record<string, string> = $state({});
+  let submitted: boolean = $state(false);
+
+  let parsedQuiz: ParsedQuiz = $derived.by(() => {
+    return QuestionParser.parseMarkdown(testMarkdown);
+  });
+
+  let totalQuestions = $derived(parsedQuiz.questions.length);
+
+  let score = $derived.by(() => {
+    if (!submitted) return 0;
+    return parsedQuiz.questions.reduce((acc, q) => {
+      return acc + (userAnswers[q.number] === q.correctAnswer ? 1 : 0);
+    }, 0);
+  });
+
+  let percentage = $derived(
+    totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0
+  );
+
+  function selectOption(qNum: string, optLetter: string) {
+    if (submitted) return; // Prevent changing after submit
+    userAnswers[qNum] = optLetter;
+  }
+
+  function submitQuiz() {
+    submitted = true;
+  }
+
+  function resetQuiz() {
+    userAnswers = {};
+    submitted = false;
+  }
+</script>
+
+<div class="h-full flex flex-col">
+  <!-- Mode Toggle Header -->
+  <div class="flex items-center justify-between pb-4 mb-4 border-b border-stone-200">
+    <div>
+      <h2 class="text-base font-semibold text-stone-900">{parsedQuiz.title}</h2>
+      <p class="text-xs text-stone-500">
+        Ontario Curriculum KICA Practice Test • {totalQuestions} Questions
+      </p>
+    </div>
+
+    <div class="flex items-center space-x-2">
+      <div class="inline-flex rounded-lg border border-stone-200 p-0.5 bg-stone-100 text-xs font-medium">
+        <button
+          onclick={() => (viewMode = 'quiz')}
+          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {viewMode === 'quiz' ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'}"
+        >
+          <PlayCircle class="w-3.5 h-3.5" />
+          <span>Interactive Quiz</span>
+        </button>
+        <button
+          onclick={() => (viewMode = 'raw')}
+          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {viewMode === 'raw' ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'}"
+        >
+          <Edit3 class="w-3.5 h-3.5" />
+          <span>Edit Markdown</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  {#if viewMode === 'raw'}
+    <!-- CodeMirror Raw Editor -->
+    <div class="flex-1 min-h-[500px]">
+      <CodeMirrorEditor
+        value={testMarkdown}
+        onChange={(val) => onSaveMarkdown(val)}
+        onSave={() => onSaveMarkdown(testMarkdown)}
+      />
+    </div>
+  {:else}
+    <!-- Interactive Quiz View -->
+    <div class="flex-1 overflow-y-auto space-y-6 pr-2">
+      <!-- Score Banner when Submitted -->
+      {#if submitted}
+        <div class="p-4 rounded-xl border {percentage >= 75 ? 'border-emerald-200 bg-emerald-50/70 text-emerald-900' : percentage >= 50 ? 'border-amber-200 bg-amber-50/70 text-amber-900' : 'border-rose-200 bg-rose-50/70 text-rose-900'} flex items-center justify-between">
+          <div class="flex items-center space-x-3">
+            <div class="p-2 rounded-lg {percentage >= 75 ? 'bg-emerald-100 text-emerald-700' : percentage >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}">
+              <Award class="w-6 h-6" />
+            </div>
+            <div>
+              <div class="text-sm font-semibold">
+                Score: {score} / {totalQuestions} ({percentage}%)
+              </div>
+              <p class="text-xs opacity-80">
+                {#if percentage >= 80}
+                  Excellent mastery of Ontario curriculum expectations!
+                {:else if percentage >= 60}
+                  Solid progress. Review the explanations below for deeper recall.
+                {:else}
+                  Keep practicing. Refer to the Full Lesson and Summary notes to reinforce these concepts.
+                {/if}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onclick={resetQuiz}
+            class="flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-stone-300 bg-white text-stone-800 text-xs font-medium hover:bg-stone-50 transition shadow-2xs"
+          >
+            <RotateCcw class="w-3.5 h-3.5" />
+            <span>Retake Quiz</span>
+          </button>
+        </div>
+      {/if}
+
+      <!-- Questions List -->
+      {#each parsedQuiz.questions as q, index}
+        {@const userPick = userAnswers[q.number]}
+        {@const isCorrect = userPick === q.correctAnswer}
+
+        <div class="rounded-xl border border-stone-200 bg-white p-5 shadow-2xs space-y-4">
+          <!-- Question Header -->
+          <div class="flex items-start justify-between">
+            <div class="space-y-1">
+              <div class="flex items-center space-x-2">
+                <span class="text-xs font-mono font-bold text-stone-400">
+                  Q{q.number}
+                </span>
+                {#if q.category}
+                  <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-stone-100 text-stone-600 border border-stone-200">
+                    {q.category}
+                  </span>
+                {/if}
+              </div>
+              <h3 class="text-sm font-medium text-stone-900 leading-snug">
+                {q.prompt}
+              </h3>
+            </div>
+
+            {#if submitted}
+              <div class="shrink-0 ml-3">
+                {#if isCorrect}
+                  <div class="flex items-center space-x-1 text-emerald-600 text-xs font-semibold">
+                    <CheckCircle2 class="w-5 h-5" />
+                    <span>Correct</span>
+                  </div>
+                {:else}
+                  <div class="flex items-center space-x-1 text-rose-600 text-xs font-semibold">
+                    <XCircle class="w-5 h-5" />
+                    <span>Incorrect</span>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+
+          <!-- Options -->
+          <div class="space-y-2">
+            {#each q.options as opt}
+              {@const isSelected = userPick === opt.letter}
+              {@const isOptionCorrect = opt.letter === q.correctAnswer}
+
+              <button
+                onclick={() => selectOption(q.number, opt.letter)}
+                disabled={submitted}
+                class="w-full text-left p-3 rounded-lg border text-xs flex items-start space-x-3 transition {
+                  submitted
+                    ? isOptionCorrect
+                      ? 'border-emerald-500 bg-emerald-50/50 font-medium text-stone-900'
+                      : isSelected
+                        ? 'border-rose-300 bg-rose-50/50 text-stone-700'
+                        : 'border-stone-100 opacity-60 text-stone-600'
+                    : isSelected
+                      ? 'border-stone-900 bg-stone-900/5 text-stone-900 font-medium'
+                      : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50 text-stone-700'
+                }"
+              >
+                <div class="w-5 h-5 rounded-full flex items-center justify-center font-mono text-[11px] shrink-0 font-medium {
+                  submitted
+                    ? isOptionCorrect
+                      ? 'bg-emerald-600 text-white'
+                      : isSelected
+                        ? 'bg-rose-500 text-white'
+                        : 'border border-stone-200 text-stone-500'
+                    : isSelected
+                      ? 'bg-stone-900 text-white'
+                      : 'border border-stone-300 text-stone-500'
+                }">
+                  {opt.letter}
+                </div>
+                <div class="leading-relaxed flex-1">
+                  {opt.text}
+                </div>
+              </button>
+            {/each}
+          </div>
+
+          <!-- Explanation after submit -->
+          {#if submitted && q.explanation}
+            <div class="mt-3 p-3 rounded-lg bg-stone-50 border border-stone-200 text-xs text-stone-700 flex items-start space-x-2">
+              <HelpCircle class="w-4 h-4 text-stone-400 shrink-0 mt-0.5" />
+              <div>
+                <span class="font-semibold text-stone-900">Explanation:</span>
+                <span class="ml-1 leading-relaxed">{q.explanation}</span>
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/each}
+
+      <!-- Submit / Action Footer -->
+      <div class="pt-4 pb-8 flex items-center justify-between">
+        {#if !submitted}
+          <div class="text-xs text-stone-500">
+            {Object.keys(userAnswers).length} of {totalQuestions} answered
+          </div>
+          <button
+            onclick={submitQuiz}
+            disabled={Object.keys(userAnswers).length === 0}
+            class="px-5 py-2 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+          >
+            Submit Practice Test
+          </button>
+        {:else}
+          <div></div>
+          <button
+            onclick={resetQuiz}
+            class="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 transition shadow-sm"
+          >
+            <RotateCcw class="w-3.5 h-3.5" />
+            <span>Retake Test</span>
+          </button>
+        {/if}
+      </div>
+    </div>
+  {/if}
+</div>

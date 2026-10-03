@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ILC Study Tool",
+  "version": "0.1.0",
+  "identifier": "com.ilc.studytool",
+  "build": {
+    "beforeDevCommand": "bun run --cwd ../app dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "bun run --cwd ../app build",
+    "frontendDist": "../app/build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ILC Study Tool",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false
+  }
+}
