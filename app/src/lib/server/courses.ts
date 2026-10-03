@@ -17,6 +17,14 @@ function getDataDir(): string {
   return path.resolve(process.cwd(), 'data');
 }
 
+export interface LessonFileVersion {
+  id: string; // e.g. "summary" or "summary-2"
+  filename: string; // e.g. "01.02.summary.md" or "01.02.summary-2.md"
+  versionNumber: number; // 1, 2, 3...
+  label: string; // "v1", "v2", ...
+  content: string;
+}
+
 export interface LessonContentBundle {
   courseId: string;
   lessonId: string;
@@ -24,6 +32,9 @@ export interface LessonContentBundle {
   summary: string;
   cheatsheet: string;
   test: string;
+  summaries: LessonFileVersion[];
+  cheatsheets: LessonFileVersion[];
+  tests: LessonFileVersion[];
 }
 
 export class CourseService {
@@ -73,6 +84,32 @@ export class CourseService {
     const courseDir = path.join(this.getCoursesDir(), courseId.toLowerCase());
     if (!fs.existsSync(courseDir)) return null;
 
+    const files = fs.readdirSync(courseDir);
+
+    const getVersions = (tabPrefix: 'summary' | 'cheatsheet' | 'test'): LessonFileVersion[] => {
+      const regex = new RegExp(`^${lessonId.replace('.', '\\.')}\\.${tabPrefix}(?:-(\\d+))?\\.md$`, 'i');
+      return files
+        .filter((f) => regex.test(f))
+        .map((f) => {
+          const match = f.match(regex);
+          const versionNum = match && match[1] ? parseInt(match[1], 10) : 1;
+          const versionId = versionNum === 1 ? tabPrefix : `${tabPrefix}-${versionNum}`;
+          const content = fs.readFileSync(path.join(courseDir, f), 'utf8');
+          return {
+            id: versionId,
+            filename: f,
+            versionNumber: versionNum,
+            label: `v${versionNum}`,
+            content
+          };
+        })
+        .sort((a, b) => a.versionNumber - b.versionNumber);
+    };
+
+    const summaries = getVersions('summary');
+    const cheatsheets = getVersions('cheatsheet');
+    const tests = getVersions('test');
+
     const readSafe = (filename: string): string => {
       const filePath = path.join(courseDir, filename);
       return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
@@ -82,30 +119,54 @@ export class CourseService {
       courseId,
       lessonId,
       lesson: readSafe(`${lessonId}.lesson.md`),
-      summary: readSafe(`${lessonId}.summary.md`),
-      cheatsheet: readSafe(`${lessonId}.cheatsheet.md`),
-      test: readSafe(`${lessonId}.test.md`)
+      summary: summaries[0]?.content || readSafe(`${lessonId}.summary.md`),
+      cheatsheet: cheatsheets[0]?.content || readSafe(`${lessonId}.cheatsheet.md`),
+      test: tests[0]?.content || readSafe(`${lessonId}.test.md`),
+      summaries,
+      cheatsheets,
+      tests
     };
   }
 
   static saveLessonTab(
     courseId: string,
     lessonId: string,
-    tab: 'lesson' | 'summary' | 'cheatsheet' | 'test',
-    content: string
-  ): boolean {
+    tab: string,
+    content: string,
+    options?: { asNewVersion?: boolean }
+  ): { success: boolean; versionId: string; filename: string } {
     const courseDir = path.join(this.getCoursesDir(), courseId.toLowerCase());
-    if (!fs.existsSync(courseDir)) return false;
+    if (!fs.existsSync(courseDir)) {
+      return { success: false, versionId: tab, filename: '' };
+    }
 
-    const filename = `${lessonId}.${tab}.md`;
+    let targetTab = tab;
+    const baseTab = tab.replace(/-\d+$/, ''); // 'summary', 'cheatsheet', or 'test'
+
+    if (options?.asNewVersion && ['summary', 'cheatsheet', 'test'].includes(baseTab)) {
+      const files = fs.readdirSync(courseDir);
+      const regex = new RegExp(`^${lessonId.replace('.', '\\.')}\\.${baseTab}(?:-(\\d+))?\\.md$`, 'i');
+      let maxVersion = 1;
+      for (const f of files) {
+        const m = f.match(regex);
+        if (m) {
+          const num = m[1] ? parseInt(m[1], 10) : 1;
+          if (num > maxVersion) maxVersion = num;
+        }
+      }
+      const nextVersion = maxVersion + 1;
+      targetTab = `${baseTab}-${nextVersion}`;
+    }
+
+    const filename = `${lessonId}.${targetTab}.md`;
     const filePath = path.join(courseDir, filename);
 
     try {
       fs.writeFileSync(filePath, content, 'utf8');
-      return true;
+      return { success: true, versionId: targetTab, filename };
     } catch (e) {
       console.error(`Failed to save ${filename}:`, e);
-      return false;
+      return { success: false, versionId: targetTab, filename };
     }
   }
 

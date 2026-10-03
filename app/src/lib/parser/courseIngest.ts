@@ -4,6 +4,7 @@ import { ArchiveExtractor } from './extractor';
 import { DomCleaner } from './domCleaner';
 import { TurndownConverter } from './turndownConverter';
 import { QuestionParser } from './questionParser';
+import { serializeWithFrontmatter } from './frontmatter';
 
 export interface CourseManifestLesson {
   id: string; // e.g. "01.02" or "01.06_assign1"
@@ -49,6 +50,21 @@ export class CourseIngest {
 
   constructor() {
     this.turndownConverter = new TurndownConverter();
+  }
+
+  private loadGenericPrompt(type: 'summary' | 'cheatsheet' | 'test'): string {
+    const rootDir = process.cwd().endsWith('/app') ? path.resolve(process.cwd(), '..') : process.cwd();
+    const promptsDir = path.join(rootDir, 'data', 'prompts');
+    const filename = type === 'test' ? 'test.md' : `${type}.md`;
+    const pPath = path.join(promptsDir, filename);
+    if (fs.existsSync(pPath)) {
+      return fs.readFileSync(pPath, 'utf8').trim();
+    }
+    if (type === 'test') {
+      const kicaPath = path.join(promptsDir, 'test_kica.md');
+      if (fs.existsSync(kicaPath)) return fs.readFileSync(kicaPath, 'utf8').trim();
+    }
+    return '';
   }
 
   /**
@@ -124,7 +140,6 @@ export class CourseIngest {
 
       // If lesson already exists and overwrite is false, preserve existing files and register
       if (isExistingLesson && !overwriteExisting) {
-        // Read title from frontmatter or first line
         let lessonTitle = `${isAssignment ? 'Assignment' : 'Lesson'} ${unitNumber}.${lessonNumber}`;
         try {
           const content = fs.readFileSync(lessonFilePath, 'utf8');
@@ -168,11 +183,12 @@ export class CourseIngest {
 
       fs.writeFileSync(lessonFilePath, fullLessonMd, 'utf8');
 
-      // 2. Generate Initial Summary if not exists
+      // 2. Generate Initial Summary with YAML frontmatter
       const summaryFilename = `${lessonId}.summary.md`;
       const summaryFilePath = path.join(courseDir, summaryFilename);
       if (!fs.existsSync(summaryFilePath) || overwriteExisting) {
-        const summaryMd = this.generateInitialSummary(
+        const summaryPrompt = this.loadGenericPrompt('summary');
+        const summaryBody = this.generateInitialSummary(
           courseId,
           extracted.unitNumber,
           extracted.lessonNumber,
@@ -181,35 +197,64 @@ export class CourseIngest {
           cleaned.successCriteria,
           extracted.isAssignment
         );
-        fs.writeFileSync(summaryFilePath, summaryMd, 'utf8');
+        const finalContent = serializeWithFrontmatter(
+          {
+            prompt: summaryPrompt,
+            type: 'summary',
+            version: 1,
+            updatedAt: new Date().toISOString().split('T')[0]
+          },
+          summaryBody
+        );
+        fs.writeFileSync(summaryFilePath, finalContent, 'utf8');
       }
 
-      // 3. Generate Initial Cheatsheet if not exists
+      // 3. Generate Initial Cheatsheet with YAML frontmatter
       const cheatsheetFilename = `${lessonId}.cheatsheet.md`;
       const cheatsheetFilePath = path.join(courseDir, cheatsheetFilename);
       if (!fs.existsSync(cheatsheetFilePath) || overwriteExisting) {
-        const cheatsheetMd = this.generateInitialCheatsheet(
+        const cheatsheetPrompt = this.loadGenericPrompt('cheatsheet');
+        const cheatsheetBody = this.generateInitialCheatsheet(
           courseId,
           extracted.unitNumber,
           extracted.lessonNumber,
           extracted.title,
           extracted.isAssignment
         );
-        fs.writeFileSync(cheatsheetFilePath, cheatsheetMd, 'utf8');
+        const finalContent = serializeWithFrontmatter(
+          {
+            prompt: cheatsheetPrompt,
+            type: 'cheatsheet',
+            version: 1,
+            updatedAt: new Date().toISOString().split('T')[0]
+          },
+          cheatsheetBody
+        );
+        fs.writeFileSync(cheatsheetFilePath, finalContent, 'utf8');
       }
 
-      // 4. Generate Initial KICA Test if not exists
+      // 4. Generate Initial KICA Test with YAML frontmatter
       const testFilename = `${lessonId}.test.md`;
       const testFilePath = path.join(courseDir, testFilename);
       if (!fs.existsSync(testFilePath) || overwriteExisting) {
-        const testMd = this.generateInitialTest(
+        const testPrompt = this.loadGenericPrompt('test');
+        const testBody = this.generateInitialTest(
           courseId,
           extracted.unitNumber,
           extracted.lessonNumber,
           extracted.title,
           extracted.isAssignment
         );
-        fs.writeFileSync(testFilePath, testMd, 'utf8');
+        const finalContent = serializeWithFrontmatter(
+          {
+            prompt: testPrompt,
+            type: 'test',
+            version: 1,
+            updatedAt: new Date().toISOString().split('T')[0]
+          },
+          testBody
+        );
+        fs.writeFileSync(testFilePath, finalContent, 'utf8');
       }
 
       lessonsMap.set(lessonId, {

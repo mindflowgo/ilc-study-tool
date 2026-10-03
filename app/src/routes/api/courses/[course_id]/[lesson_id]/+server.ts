@@ -12,20 +12,28 @@ export const GET: RequestHandler = async ({ params }) => {
 
 export const PUT: RequestHandler = async ({ params, request }) => {
   const body = await request.json();
-  const { tab, content } = body;
+  const { tab, content, asNewVersion } = body;
 
   if (!tab || typeof content !== 'string') {
     throw error(400, 'Invalid request: tab and content are required');
   }
 
-  if (!['lesson', 'summary', 'cheatsheet', 'test'].includes(tab)) {
-    throw error(400, `Invalid tab: ${tab}`);
+  const baseTab = tab.replace(/-\d+$/, '');
+  if (!['lesson', 'summary', 'cheatsheet', 'test'].includes(baseTab)) {
+    throw error(400, `Invalid tab identifier: ${tab}`);
   }
 
-  const success = CourseService.saveLessonTab(params.course_id, params.lesson_id, tab as any, content);
-  if (!success) {
+  const result = CourseService.saveLessonTab(
+    params.course_id,
+    params.lesson_id,
+    tab,
+    content,
+    { asNewVersion: !!asNewVersion }
+  );
+
+  if (!result.success) {
     throw error(500, `Failed to save ${tab} for lesson ${params.lesson_id}`);
   }
 
-  return json({ success: true });
+  return json(result);
 };

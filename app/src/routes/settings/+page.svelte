@@ -15,6 +15,7 @@
   let provider = $state('openai_compatible');
   let baseUrl = $state('http://localhost:11434/v1');
   let apiKey = $state('');
+  let authHeaderType: 'bearer' | 'api_key' | 'both' = $state('bearer');
   let model = $state('llama3');
   let temperature = $state(0.3);
 
@@ -30,6 +31,7 @@
       provider = localStorage.getItem('ilc_llm_provider') || 'openai_compatible';
       baseUrl = localStorage.getItem('ilc_llm_baseUrl') || 'http://localhost:11434/v1';
       apiKey = localStorage.getItem('ilc_llm_apiKey') || '';
+      authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
       model = localStorage.getItem('ilc_llm_model') || 'llama3';
       temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
     }
@@ -40,6 +42,7 @@
       localStorage.setItem('ilc_llm_provider', provider);
       localStorage.setItem('ilc_llm_baseUrl', baseUrl);
       localStorage.setItem('ilc_llm_apiKey', apiKey);
+      localStorage.setItem('ilc_llm_authHeaderType', authHeaderType);
       localStorage.setItem('ilc_llm_model', model);
       localStorage.setItem('ilc_llm_temp', temperature.toString());
       saveMessage = 'Settings saved to browser storage.';
@@ -63,6 +66,7 @@
             provider,
             baseUrl,
             apiKey,
+            authHeaderType,
             model,
             temperature
           }
@@ -166,12 +170,28 @@
       </div>
 
       <div class="space-y-1.5">
-        <label for="model-name-input" class="text-xs font-medium text-stone-700">Model Name</label>
+        <label for="auth-type-select" class="text-xs font-medium text-stone-700 flex items-center justify-between">
+          <span>Auth Header Format</span>
+          <span class="text-[10px] text-stone-400 font-mono">Authorization: Bearer</span>
+        </label>
+        <select
+          id="auth-type-select"
+          bind:value={authHeaderType}
+          class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 bg-white focus:outline-none focus:ring-1 focus:ring-stone-900"
+        >
+          <option value="bearer">Authorization: Bearer &#123;key&#125; (Standard OpenAI / OpenRouter)</option>
+          <option value="api_key">api-key: &#123;key&#125; (Azure / Custom OpenAPI)</option>
+          <option value="both">Both (Authorization: Bearer + api-key)</option>
+        </select>
+      </div>
+
+      <div class="space-y-1.5">
+        <label for="model-name-input" class="text-xs font-medium text-stone-700">Model Name (optional)</label>
         <input
           id="model-name-input"
           type="text"
           bind:value={model}
-          placeholder="llama3, gpt-4o-mini"
+          placeholder="e.g. gpt-4o-mini, llama3 (or blank if server default)"
           class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
         />
       </div>

@@ -6,7 +6,11 @@
   import CodeMirrorEditor from '$lib/components/CodeMirrorEditor.svelte';
   import QuizRunner from '$lib/components/QuizRunner.svelte';
   import UploadModal from '$lib/components/UploadModal.svelte';
+  import PromptCard, { type VersionItem } from '$lib/components/PromptCard.svelte';
+  import ConfigureLLMModal from '$lib/components/ConfigureLLMModal.svelte';
+  import { parseFrontmatter, serializeWithFrontmatter } from '$lib/parser/frontmatter';
   import type { CourseManifest } from '$lib/parser/courseIngest';
+  import type { LessonContentBundle, LessonFileVersion } from '$lib/server/courses';
   import { onMount } from 'svelte';
   import {
     BookOpen,
@@ -31,8 +35,21 @@
   let activeTab: 'lesson' | 'summary' | 'cheatsheet' | 'test' = $state('lesson');
   let isEditing: boolean = $state(false);
   let isUploadModalOpen: boolean = $state(false);
+  let isLLMModalOpen: boolean = $state(false);
+  let isGeneratingAI: boolean = $state(false);
 
-  // Lesson tab contents
+  // Lesson bundle and generic prompt templates
+  let lessonBundle: LessonContentBundle | null = $state(null);
+  let genericPrompts: Record<string, string> = $state({});
+
+  // Active version IDs for versioned tabs
+  let activeVersions: Record<'summary' | 'cheatsheet' | 'test', string> = $state({
+    summary: 'summary',
+    cheatsheet: 'cheatsheet',
+    test: 'test'
+  });
+
+  // Current tab contents (raw markdown including frontmatter)
   let tabContents: Record<string, string> = $state({
     lesson: '',
     summary: '',
@@ -52,10 +69,60 @@
   let isSaving = $state(false);
   let saveSuccessMessage = $state('');
 
+  // Default prompt for active tab
+  let defaultPromptForActiveTab = $derived.by(() => {
+    if (activeTab === 'lesson') return '';
+    return genericPrompts[activeTab] || '';
+  });
+
+  // Parsed frontmatter and markdown body for current tab
+  let parsedActiveTab = $derived.by(() => {
+    const raw = tabContents[activeTab] || '';
+    return parseFrontmatter(raw, defaultPromptForActiveTab);
+  });
+
+  // Display name for active tab
+  let tabDisplayName = $derived.by(() => {
+    if (activeTab === 'summary') return 'Summary';
+    if (activeTab === 'cheatsheet') return 'Cheatsheet';
+    if (activeTab === 'test') return 'Practice Test';
+    return '';
+  });
+
+  // Current list of versions for active tab
+  let currentTabVersions = $derived.by((): VersionItem[] => {
+    if (!lessonBundle || activeTab === 'lesson') return [];
+    if (activeTab === 'summary') return lessonBundle.summaries;
+    if (activeTab === 'cheatsheet') return lessonBundle.cheatsheets;
+    if (activeTab === 'test') return lessonBundle.tests;
+    return [];
+  });
+
+  let activeVersionId = $derived.by(() => {
+    if (activeTab === 'lesson') return 'lesson';
+    return activeVersions[activeTab] || currentTabVersions[0]?.id || activeTab;
+  });
+
   // Check if current tab has unsaved changes
   let hasUnsavedChanges = $derived(
     tabContents[activeTab] !== originalContents[activeTab]
   );
+
+  async function loadPrompts() {
+    try {
+      const res = await fetch('/api/prompts');
+      if (res.ok) {
+        const data = await res.json();
+        const map: Record<string, string> = {};
+        for (const p of data.prompts || []) {
+          map[p.id] = p.content;
+        }
+        genericPrompts = map;
+      }
+    } catch (e) {
+      console.warn('Failed to load prompts template:', e);
+    }
+  }
 
   async function loadCourse(selectTargetLessonId?: string) {
     isLoadingCourse = true;
@@ -76,18 +143,43 @@
     }
   }
 
-  async function loadLesson(lessonId: string) {
+  async function loadLesson(lessonId: string, retainVersionTab?: { tab: 'summary' | 'cheatsheet' | 'test'; versionId: string }) {
     selectedLessonId = lessonId;
     isLoadingLesson = true;
     try {
       const res = await fetch(`/api/courses/${courseId}/${lessonId}`);
       if (res.ok) {
-        const data = await res.json();
+        const data: LessonContentBundle = await res.json();
+        lessonBundle = data;
+
+        // Set or retain active version IDs
+        const summaryVer = retainVersionTab?.tab === 'summary'
+          ? retainVersionTab.versionId
+          : (data.summaries.find((v) => v.id === activeVersions.summary)?.id || data.summaries[0]?.id || 'summary');
+
+        const cheatsheetVer = retainVersionTab?.tab === 'cheatsheet'
+          ? retainVersionTab.versionId
+          : (data.cheatsheets.find((v) => v.id === activeVersions.cheatsheet)?.id || data.cheatsheets[0]?.id || 'cheatsheet');
+
+        const testVer = retainVersionTab?.tab === 'test'
+          ? retainVersionTab.versionId
+          : (data.tests.find((v) => v.id === activeVersions.test)?.id || data.tests[0]?.id || 'test');
+
+        activeVersions = {
+          summary: summaryVer,
+          cheatsheet: cheatsheetVer,
+          test: testVer
+        };
+
+        const activeSummaryContent = data.summaries.find((v) => v.id === summaryVer)?.content || data.summary || '';
+        const activeCheatsheetContent = data.cheatsheets.find((v) => v.id === cheatsheetVer)?.content || data.cheatsheet || '';
+        const activeTestContent = data.tests.find((v) => v.id === testVer)?.content || data.test || '';
+
         tabContents = {
           lesson: data.lesson || '',
-          summary: data.summary || '',
-          cheatsheet: data.cheatsheet || '',
-          test: data.test || ''
+          summary: activeSummaryContent,
+          cheatsheet: activeCheatsheetContent,
+          test: activeTestContent
         };
         originalContents = { ...tabContents };
       }
@@ -98,9 +190,42 @@
     }
   }
 
-  async function saveCurrentTab() {
-    if (!selectedLessonId) return;
-    isSaving = true;
+  function handleSelectVersion(versionId: string) {
+    if (activeTab === 'lesson' || !lessonBundle) return;
+    activeVersions[activeTab] = versionId;
+
+    let versionsList: LessonFileVersion[] = [];
+    if (activeTab === 'summary') versionsList = lessonBundle.summaries;
+    else if (activeTab === 'cheatsheet') versionsList = lessonBundle.cheatsheets;
+    else if (activeTab === 'test') versionsList = lessonBundle.tests;
+
+    const found = versionsList.find((v) => v.id === versionId);
+    if (found) {
+      tabContents[activeTab] = found.content;
+      originalContents[activeTab] = found.content;
+    }
+  }
+
+  async function handleCreateNewVersion() {
+    if (activeTab === 'lesson' || !selectedLessonId) return;
+
+    const nextVer = (currentTabVersions.length > 0 ? Math.max(...currentTabVersions.map((v) => v.versionNumber)) : 0) + 1;
+    const defaultPrompt = genericPrompts[activeTab] || '';
+
+    let placeholderBody = `# ${currentLessonTitle} - ${tabDisplayName} (v${nextVer})\n\nClick "Re-generate with AI" above to generate study material using this prompt.`;
+    if (activeTab === 'test') {
+      placeholderBody = `# ${currentLessonTitle} - Practice Test (v${nextVer})\n\n## Questions\n01) [Knowledge & Understanding] Placeholder question.\n<Multiple-Choice>\n- [ ] Option A\n- [ ] Option B\n\n--\n\n## Answers\n01) A - (explanation) Placeholder answer. Click "Re-generate with AI" to generate curriculum questions.\n`;
+    }
+
+    const newContent = serializeWithFrontmatter(
+      {
+        prompt: defaultPrompt,
+        type: activeTab,
+        version: nextVer,
+        updatedAt: new Date().toISOString().split('T')[0]
+      },
+      placeholderBody
+    );
 
     try {
       const res = await fetch(`/api/courses/${courseId}/${selectedLessonId}`, {
@@ -108,7 +233,37 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tab: activeTab,
-          content: tabContents[activeTab]
+          content: newContent,
+          asNewVersion: true
+        })
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        await loadLesson(selectedLessonId, { tab: activeTab, versionId: result.versionId });
+        saveSuccessMessage = `Created v${nextVer}!`;
+        setTimeout(() => {
+          saveSuccessMessage = '';
+        }, 2000);
+      }
+    } catch (e) {
+      console.error('Failed to create new version:', e);
+    }
+  }
+
+  async function saveCurrentTab() {
+    if (!selectedLessonId) return;
+    isSaving = true;
+
+    try {
+      const targetTab = activeTab === 'lesson' ? 'lesson' : activeVersions[activeTab];
+      const res = await fetch(`/api/courses/${courseId}/${selectedLessonId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tab: targetTab,
+          content: tabContents[activeTab],
+          asNewVersion: false
         })
       });
 
@@ -118,6 +273,11 @@
         setTimeout(() => {
           saveSuccessMessage = '';
         }, 2000);
+        // Silently reload lesson bundle to sync versions
+        const reloadRes = await fetch(`/api/courses/${courseId}/${selectedLessonId}`);
+        if (reloadRes.ok) {
+          lessonBundle = await reloadRes.json();
+        }
       }
     } catch (e) {
       console.error('Failed to save tab:', e);
@@ -128,6 +288,121 @@
 
   function handleEditorChange(newVal: string) {
     tabContents[activeTab] = newVal;
+  }
+
+  function handlePromptChange(newPrompt: string) {
+    if (activeTab === 'lesson') return;
+    const currentParsed = parsedActiveTab;
+    const updatedFrontmatter = {
+      ...currentParsed.frontmatter,
+      prompt: newPrompt,
+      updatedAt: new Date().toISOString().split('T')[0]
+    };
+    tabContents[activeTab] = serializeWithFrontmatter(updatedFrontmatter, currentParsed.body);
+  }
+
+  function handleBodyChange(newBody: string) {
+    if (activeTab === 'lesson') {
+      tabContents[activeTab] = newBody;
+      return;
+    }
+    const currentParsed = parsedActiveTab;
+    tabContents[activeTab] = serializeWithFrontmatter(currentParsed.frontmatter, newBody);
+  }
+
+  async function triggerAIGeneration(asNewVersion: boolean = false) {
+    let provider = '';
+    let baseUrl = '';
+    let model = '';
+    let apiKey = '';
+    let authHeaderType: 'bearer' | 'api_key' | 'both' = 'bearer';
+    let temperature = 0.3;
+
+    if (typeof localStorage !== 'undefined') {
+      provider = localStorage.getItem('ilc_llm_provider') || '';
+      baseUrl = localStorage.getItem('ilc_llm_baseUrl') || '';
+      model = localStorage.getItem('ilc_llm_model') || '';
+      apiKey = localStorage.getItem('ilc_llm_apiKey') || '';
+      authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
+      temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
+    }
+
+    if (!baseUrl) {
+      isLLMModalOpen = true;
+      return;
+    }
+
+    isGeneratingAI = true;
+
+    try {
+      const fullLessonContent = tabContents.lesson || '';
+      const userPrompt = `Course: ${course?.title || courseId}\nLesson: ${currentLessonTitle}\n\nFull Lesson Material:\n${fullLessonContent}`;
+      const sessionId = `${courseId}-${activeTab}`;
+
+      const res = await fetch('/api/llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate',
+          config: {
+            provider,
+            baseUrl,
+            apiKey,
+            authHeaderType,
+            model,
+            temperature,
+            sessionId
+          },
+          sessionId,
+          systemPrompt: parsedActiveTab.frontmatter.prompt || defaultPromptForActiveTab,
+          userPrompt
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || 'Generation request failed');
+      }
+
+      const data = await res.json();
+      const newGeneratedContent = data.completion;
+
+      // Prepare target version frontmatter
+      const nextVer = (currentTabVersions.length > 0 ? Math.max(...currentTabVersions.map((v) => v.versionNumber)) : 0) + 1;
+      const frontmatterToSave = {
+        ...parsedActiveTab.frontmatter,
+        prompt: parsedActiveTab.frontmatter.prompt || defaultPromptForActiveTab,
+        type: activeTab,
+        version: asNewVersion ? nextVer : (parsedActiveTab.frontmatter.version || 1),
+        updatedAt: new Date().toISOString().split('T')[0]
+      };
+
+      const finalMarkdown = serializeWithFrontmatter(frontmatterToSave, newGeneratedContent);
+      const targetTab = asNewVersion ? activeTab : (activeTab === 'lesson' ? 'lesson' : activeVersions[activeTab]);
+
+      const saveRes = await fetch(`/api/courses/${courseId}/${selectedLessonId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tab: targetTab,
+          content: finalMarkdown,
+          asNewVersion
+        })
+      });
+
+      if (saveRes.ok) {
+        const saveResult = await saveRes.json();
+        await loadLesson(selectedLessonId, { tab: activeTab as any, versionId: saveResult.versionId });
+        saveSuccessMessage = asNewVersion ? `✨ Generated as v${nextVer}!` : '✨ Re-generated with AI!';
+        setTimeout(() => {
+          saveSuccessMessage = '';
+        }, 3000);
+      }
+    } catch (err: any) {
+      alert('AI Generation Error: ' + (err?.message || 'Check your LLM configuration.'));
+    } finally {
+      isGeneratingAI = false;
+    }
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -146,6 +421,7 @@
   }
 
   onMount(() => {
+    loadPrompts();
     loadCourse();
   });
 
@@ -186,7 +462,7 @@
         <LessonSelector
           {course}
           {selectedLessonId}
-          onSelectLesson={loadLesson}
+          onSelectLesson={(id) => loadLesson(id)}
         />
 
         <button
@@ -280,32 +556,50 @@
         <div class="h-64 flex items-center justify-center">
           <Loader2 class="w-6 h-6 animate-spin text-stone-300" />
         </div>
-      {:else if activeTab === 'test'}
-        <!-- Practice Test Interactive Runner & Editor -->
-        <QuizRunner
-          testMarkdown={tabContents.test}
-          onSaveMarkdown={(val) => {
-            tabContents.test = val;
-            saveCurrentTab();
-          }}
-        />
-      {:else if isEditing}
-        <!-- CodeMirror Editor -->
-        <div class="h-[calc(100vh-11rem)]">
-          <CodeMirrorEditor
-            value={tabContents[activeTab]}
-            onChange={handleEditorChange}
-            onSave={saveCurrentTab}
-          />
-        </div>
       {:else}
-        <!-- Markdown Reader View -->
-        <article class="bg-white rounded-2xl border border-stone-200 p-6 sm:p-10 shadow-2xs">
-          <MarkdownViewer
-            markdown={tabContents[activeTab]}
-            courseId={course.id}
+        <!-- Prompt Card with Version Switcher for Summary, Cheatsheet, Test (when not editing raw markdown) -->
+        {#if activeTab !== 'lesson' && !isEditing}
+          <PromptCard
+            prompt={parsedActiveTab.frontmatter.prompt || defaultPromptForActiveTab}
+            tabName={tabDisplayName}
+            versions={currentTabVersions}
+            {activeVersionId}
+            isGenerating={isGeneratingAI}
+            onChangePrompt={handlePromptChange}
+            onRegenerate={triggerAIGeneration}
+            onSelectVersion={handleSelectVersion}
+            onCreateNewVersion={handleCreateNewVersion}
+            onResetPrompt={() => handlePromptChange(defaultPromptForActiveTab)}
           />
-        </article>
+        {/if}
+
+        {#if activeTab === 'test'}
+          <!-- Practice Test Interactive Runner & Inline Editor -->
+          <QuizRunner
+            testMarkdown={parsedActiveTab.body}
+            onSaveMarkdown={(val) => {
+              handleBodyChange(val);
+              saveCurrentTab();
+            }}
+          />
+        {:else if isEditing}
+          <!-- CodeMirror Editor (direct raw markdown with YAML frontmatter) -->
+          <div class="h-[calc(100vh-11rem)]">
+            <CodeMirrorEditor
+              value={tabContents[activeTab]}
+              onChange={handleEditorChange}
+              onSave={saveCurrentTab}
+            />
+          </div>
+        {:else}
+          <!-- Markdown Reader View -->
+          <article class="bg-white rounded-2xl border border-stone-200 p-6 sm:p-10 shadow-2xs">
+            <MarkdownViewer
+              markdown={parsedActiveTab.body}
+              courseId={course.id}
+            />
+          </article>
+        {/if}
       {/if}
     </div>
   </div>
@@ -315,5 +609,11 @@
     presetCourseId={course.id}
     onClose={() => (isUploadModalOpen = false)}
     onUploaded={handleChaptersUploaded}
+  />
+
+  <ConfigureLLMModal
+    isOpen={isLLMModalOpen}
+    onClose={() => (isLLMModalOpen = false)}
+    onConfigured={() => triggerAIGeneration(false)}
   />
 {/if}

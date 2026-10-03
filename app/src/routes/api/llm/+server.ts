@@ -4,10 +4,14 @@ import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
-  const { action, config, systemPrompt, userPrompt } = body;
+  const { action, config, systemPrompt, userPrompt, sessionId } = body;
 
   if (!config) {
     throw error(400, 'LLM config is required');
+  }
+
+  if (sessionId && !config.sessionId) {
+    config.sessionId = sessionId;
   }
 
   if (action === 'test') {

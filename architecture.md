@@ -23,7 +23,7 @@ All content is stored in a transparent, flat Markdown filesystem with zero exter
    - Customizable prompt templates for generating lesson summaries, cheatsheets, and KICA tests with dynamic placeholders (`{{lesson_title}}`, `{{content}}`, `{{unit}}`).
 4. **Settings (`/settings`)**:
    - Data storage path configuration (default: `data/courses`).
-   - LLM endpoint configuration (OpenAI-compatible, Ollama, Gemini, OpenRouter) with connection testing.
+   - LLM endpoint configuration (OpenAI-compatible, Ollama, Gemini, OpenRouter) with connection testing and selectable authentication header format (`Authorization: Bearer {key}`, `api-key: {key}`, or both).
    - Manual re-index and re-parse triggers.
 
 ---
@@ -168,6 +168,31 @@ course: CLU3M.01.02
 01) B - (explanation) Laws are created by governments and apply to all members of a society, enforced by state apparatus (police, courts). Rules are created by private organizations or groups and only apply to individuals who participate in them.
 02) B - (explanation) Laws evolve as society evolves; technological transformation shifts societal norms and economic realities, necessitating updated statutory frameworks.
 ```
+
+### 3.4 Study Material YAML Frontmatter & Multi-Versioning Schema
+All generated study materials (`.summary.md`, `.cheatsheet.md`, `.test.md`) store their AI prompt instructions and revision metadata in standard YAML frontmatter (`--- ... ---`):
+
+```markdown
+---
+prompt: |
+  # ILC Lesson Summary Generation Prompt
+  You are an expert Ontario Secondary School educator...
+type: summary
+version: 1
+updatedAt: '2026-10-03'
+---
+
+# Study Summary: Learning activity 1.2: Differentiating laws from rules
+...
+```
+
+#### Multi-Version Storage
+When students experiment with alternative prompts or regenerate study materials:
+- **v1 (Initial)**: `<lessonId>.<tab>.md` (e.g., `01.02.summary.md`)
+- **v2 (Revision 2)**: `<lessonId>.<tab>-2.md` (e.g., `01.02.summary-2.md`)
+- **vN (Revision N)**: `<lessonId>.<tab>-N.md` (e.g., `01.02.summary-N.md`)
+
+The UI provides clean pill buttons (`[ v1 ] [ v2 ] [ + New ]`) allowing students to switch between versions instantaneously. When re-generating with AI, users choose whether to overwrite the active version or branch into a new version.
 
 ---
 
