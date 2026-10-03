@@ -26,7 +26,8 @@
     Layers,
     Loader2,
     Check,
-    Plus
+    Plus,
+    X
   } from 'lucide-svelte';
 
   let courseId = $derived($page.params.course_id);
@@ -338,6 +339,13 @@
       const fullLessonContent = tabContents.lesson || '';
       const userPrompt = `Course: ${course?.title || courseId}\nLesson: ${currentLessonTitle}\n\nFull Lesson Material:\n${fullLessonContent}`;
       const sessionId = `${courseId}-${activeTab}`;
+      const activeSystemPrompt = parsedActiveTab.frontmatter.prompt || defaultPromptForActiveTab;
+
+      console.log(`[ILC AI Request: ${tabDisplayName}]`);
+      console.log(`- Session ID: ${sessionId}`);
+      console.log(`- System Prompt: "${activeSystemPrompt.slice(0, 150)}..."`);
+      console.log(`- User Prompt Length: ${userPrompt.length.toLocaleString()} characters (~${Math.round(userPrompt.length / 4).toLocaleString()} tokens)`);
+      console.log(`- User Prompt Start:\n"${userPrompt.slice(0, 200)}..."`);
 
       const res = await fetch('/api/llm', {
         method: 'POST',
@@ -354,18 +362,21 @@
             sessionId
           },
           sessionId,
-          systemPrompt: parsedActiveTab.frontmatter.prompt || defaultPromptForActiveTab,
+          systemPrompt: activeSystemPrompt,
           userPrompt
         })
       });
 
       if (!res.ok) {
         const errText = await res.text();
+        console.error(`[ILC AI Error] Status: ${res.status}`, errText);
         throw new Error(errText || 'Generation request failed');
       }
 
       const data = await res.json();
       const newGeneratedContent = data.completion;
+      const usageInfo = data.usage?.total_tokens !== undefined ? ` | "total_tokens":${data.usage.total_tokens}` : '';
+      console.log(`[ILC AI Received] ${newGeneratedContent.length.toLocaleString()} characters for ${tabDisplayName}${usageInfo}`);
 
       // Prepare target version frontmatter
       const nextVer = (currentTabVersions.length > 0 ? Math.max(...currentTabVersions.map((v) => v.versionNumber)) : 0) + 1;
@@ -405,10 +416,26 @@
     }
   }
 
+  function handleCancelEdit() {
+    tabContents[activeTab] = originalContents[activeTab];
+    isEditing = false;
+  }
+
+  async function handleSaveEdit() {
+    await saveCurrentTab();
+    isEditing = false;
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
-      saveCurrentTab();
+      if (isEditing) {
+        handleSaveEdit();
+      } else {
+        saveCurrentTab();
+      }
+    } else if (e.key === 'Escape' && isEditing) {
+      handleCancelEdit();
     }
   }
 
@@ -509,45 +536,6 @@
           <span>Practice Test</span>
         </button>
       </div>
-
-      <!-- Right: Action Controls (Edit Mode / Save) -->
-      <div class="flex items-center space-x-2">
-        {#if activeTab !== 'test'}
-          <button
-            onclick={() => (isEditing = !isEditing)}
-            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition {isEditing ? 'border-stone-900 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-700 hover:bg-stone-50'}"
-          >
-            {#if isEditing}
-              <Eye class="w-3.5 h-3.5" />
-              <span>Reader View</span>
-            {:else}
-              <Edit3 class="w-3.5 h-3.5" />
-              <span>Edit Markdown</span>
-            {/if}
-          </button>
-        {/if}
-
-        <button
-          onclick={saveCurrentTab}
-          disabled={isSaving || !hasUnsavedChanges}
-          title="Save file (⌘+S)"
-          class="flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-stone-200 bg-white text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed hover:bg-stone-50 text-stone-800 shadow-2xs"
-        >
-          {#if isSaving}
-            <Loader2 class="w-3.5 h-3.5 animate-spin" />
-            <span>Saving...</span>
-          {:else if saveSuccessMessage}
-            <Check class="w-3.5 h-3.5 text-emerald-600" />
-            <span class="text-emerald-600 font-semibold">{saveSuccessMessage}</span>
-          {:else}
-            <Save class="w-3.5 h-3.5" />
-            <span>Save</span>
-            {#if hasUnsavedChanges}
-              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 ml-0.5"></span>
-            {/if}
-          {/if}
-        </button>
-      </div>
     </div>
 
     <!-- Main Workspace Content Area -->
@@ -573,33 +561,77 @@
           />
         {/if}
 
-        {#if activeTab === 'test'}
-          <!-- Practice Test Interactive Runner & Inline Editor -->
-          <QuizRunner
-            testMarkdown={parsedActiveTab.body}
-            onSaveMarkdown={(val) => {
-              handleBodyChange(val);
-              saveCurrentTab();
-            }}
-          />
-        {:else if isEditing}
-          <!-- CodeMirror Editor (direct raw markdown with YAML frontmatter) -->
-          <div class="h-[calc(100vh-11rem)]">
-            <CodeMirrorEditor
-              value={tabContents[activeTab]}
-              onChange={handleEditorChange}
-              onSave={saveCurrentTab}
-            />
+        <!-- Main Card with Absolute Top-Right [Edit Markdown] or [Cancel] | [Save] Controls -->
+        <div class="relative bg-white rounded-2xl border border-stone-200 shadow-2xs group overflow-hidden">
+          <!-- Top-Right Action Controls (Absolute) -->
+          <div class="absolute top-4 right-4 z-20 flex items-center space-x-2">
+            {#if isEditing}
+              <button
+                onclick={handleCancelEdit}
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition shadow-2xs cursor-pointer"
+                title="Discard changes and exit edit mode (Esc)"
+              >
+                <X class="w-3.5 h-3.5 text-stone-500" />
+                <span>Cancel</span>
+              </button>
+
+              <button
+                onclick={handleSaveEdit}
+                disabled={isSaving}
+                class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white text-xs font-medium transition shadow-2xs cursor-pointer"
+                title="Save changes to file (⌘+S)"
+              >
+                {#if isSaving}
+                  <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                {:else if saveSuccessMessage}
+                  <Check class="w-3.5 h-3.5 text-emerald-400" />
+                  <span class="text-emerald-400 font-semibold">{saveSuccessMessage}</span>
+                {:else}
+                  <Save class="w-3.5 h-3.5" />
+                  <span>Save</span>
+                {/if}
+              </button>
+            {:else}
+              <button
+                onclick={() => (isEditing = true)}
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-white/95 hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-2xs hover:shadow-xs transition cursor-pointer"
+                title="Edit Markdown source"
+              >
+                <Edit3 class="w-3.5 h-3.5 text-stone-500" />
+                <span>Edit Markdown</span>
+              </button>
+            {/if}
           </div>
-        {:else}
-          <!-- Markdown Reader View -->
-          <article class="bg-white rounded-2xl border border-stone-200 p-6 sm:p-10 shadow-2xs">
-            <MarkdownViewer
-              markdown={parsedActiveTab.body}
-              courseId={course.id}
-            />
-          </article>
-        {/if}
+
+          {#if isEditing}
+            <!-- CodeMirror Editor (direct raw markdown with YAML frontmatter) -->
+            <div class="p-4 sm:p-6 pt-16">
+              <div class="h-[calc(100vh-16rem)]">
+                <CodeMirrorEditor
+                  value={tabContents[activeTab]}
+                  onChange={handleEditorChange}
+                  onSave={handleSaveEdit}
+                />
+              </div>
+            </div>
+          {:else if activeTab === 'test'}
+            <!-- Practice Test Interactive Runner -->
+            <div class="p-6 sm:p-10">
+              <QuizRunner
+                testMarkdown={parsedActiveTab.body}
+              />
+            </div>
+          {:else}
+            <!-- Markdown Reader View -->
+            <article class="p-6 sm:p-10">
+              <MarkdownViewer
+                markdown={parsedActiveTab.body}
+                courseId={course.id}
+              />
+            </article>
+          {/if}
+        </div>
       {/if}
     </div>
   </div>

@@ -5,12 +5,11 @@
 
   interface Props {
     testMarkdown: string;
-    onSaveMarkdown: (newMarkdown: string) => void;
+    onSaveMarkdown?: (newMarkdown: string) => void;
   }
 
-  let { testMarkdown, onSaveMarkdown }: Props = $props();
+  let { testMarkdown }: Props = $props();
 
-  let viewMode: 'quiz' | 'raw' = $state('quiz');
   let userAnswers: Record<string, string> = $state({});
   let submitted: boolean = $state(false);
 
@@ -47,45 +46,15 @@
 </script>
 
 <div class="h-full flex flex-col">
-  <!-- Mode Toggle Header -->
-  <div class="flex items-center justify-between pb-4 mb-4 border-b border-stone-200">
+  <!-- Quiz Header -->
+  <div class="flex items-center justify-between pb-4 mb-4 border-b border-stone-200 pr-36">
     <div>
       <h2 class="text-base font-semibold text-stone-900">{parsedQuiz.title}</h2>
       <p class="text-xs text-stone-500">
         Ontario Curriculum KICA Practice Test • {totalQuestions} Questions
       </p>
     </div>
-
-    <div class="flex items-center space-x-2">
-      <div class="inline-flex rounded-lg border border-stone-200 p-0.5 bg-stone-100 text-xs font-medium">
-        <button
-          onclick={() => (viewMode = 'quiz')}
-          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {viewMode === 'quiz' ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'}"
-        >
-          <PlayCircle class="w-3.5 h-3.5" />
-          <span>Interactive Quiz</span>
-        </button>
-        <button
-          onclick={() => (viewMode = 'raw')}
-          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {viewMode === 'raw' ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'}"
-        >
-          <Edit3 class="w-3.5 h-3.5" />
-          <span>Edit Markdown</span>
-        </button>
-      </div>
-    </div>
   </div>
-
-  {#if viewMode === 'raw'}
-    <!-- CodeMirror Raw Editor -->
-    <div class="flex-1 min-h-[500px]">
-      <CodeMirrorEditor
-        value={testMarkdown}
-        onChange={(val) => onSaveMarkdown(val)}
-        onSave={() => onSaveMarkdown(testMarkdown)}
-      />
-    </div>
-  {:else}
     <!-- Interactive Quiz View -->
     <div class="flex-1 overflow-y-auto space-y-6 pr-2">
       <!-- Score Banner when Submitted -->
@@ -241,5 +210,4 @@
         {/if}
       </div>
     </div>
-  {/if}
 </div>

@@ -8,6 +8,15 @@ export interface LLMConfig {
   sessionId?: string;
 }
 
+export interface LLMResult {
+  completion: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+}
+
 export function resolveCompletionsUrl(baseUrl: string): string {
   if (!baseUrl) return '';
   const clean = baseUrl.trim().replace(/\/+$/, '');
@@ -21,7 +30,7 @@ export function resolveCompletionsUrl(baseUrl: string): string {
 }
 
 export class LLMService {
-  static async generate(config: LLMConfig, systemPrompt: string, userPrompt: string): Promise<string> {
+  static async generateResult(config: LLMConfig, systemPrompt: string, userPrompt: string): Promise<LLMResult> {
     const primaryUrl = resolveCompletionsUrl(config.baseUrl);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
@@ -60,6 +69,23 @@ export class LLMService {
       payload.session_id = config.sessionId.trim();
     }
 
+    // Diagnostic console logging
+    const systemPreview = systemPrompt.length > 250 ? systemPrompt.slice(0, 250) + '...' : systemPrompt;
+    const userPreview = userPrompt.length > 250 ? userPrompt.slice(0, 250) + '...' : userPrompt;
+    const authHeaderDisplay = headers['Authorization']
+      ? `Bearer ${headers['Authorization'].slice(7, 11)}***`
+      : (headers['api-key'] ? 'api-key: ***' : 'None');
+
+    console.log('\n=================== [LLM API Request] ===================');
+    console.log(`Endpoint:    ${primaryUrl}`);
+    console.log(`Session ID:  ${payload.session_id || 'none'}`);
+    console.log(`Model:       ${payload.model || '(server default)'}`);
+    console.log(`Auth Header: ${authHeaderDisplay}`);
+    console.log(`System Prompt Preview:\n${systemPreview}`);
+    console.log(`\nUser Prompt Length: ${userPrompt.length.toLocaleString()} chars (~${Math.round(userPrompt.length / 4).toLocaleString()} tokens)`);
+    console.log(`User Prompt Preview:\n${userPreview}`);
+    console.log('=========================================================\n');
+
     let res = await fetch(primaryUrl, {
       method: 'POST',
       headers,
@@ -71,6 +97,7 @@ export class LLMService {
       const cleanBase = config.baseUrl.trim().replace(/\/+$/, '');
       const fallbackUrl = `${cleanBase}/chat/completions`;
       if (fallbackUrl !== primaryUrl) {
+        console.warn(`[LLM API] Primary URL returned 404, attempting fallback URL: ${fallbackUrl}`);
         const fallbackRes = await fetch(fallbackUrl, {
           method: 'POST',
           headers,
@@ -82,13 +109,29 @@ export class LLMService {
       }
     }
 
+    console.log(`[LLM API Response] Status: ${res.status} ${res.statusText}`);
+
     if (!res.ok) {
       const errText = await res.text();
+      console.error(`[LLM API Error Body] ${errText}`);
       throw new Error(`LLM Error (${res.status}): ${errText}`);
     }
 
     const data = await res.json();
-    return data.choices?.[0]?.message?.content || '';
+    const completion = data.choices?.[0]?.message?.content || '';
+    const usage = data.usage;
+    const tokensInfo = usage?.total_tokens !== undefined
+      ? ` | "total_tokens":${usage.total_tokens} (prompt: ${usage.prompt_tokens ?? '?'}, completion: ${usage.completion_tokens ?? '?'})`
+      : (usage ? ` | usage: ${JSON.stringify(usage)}` : '');
+
+    console.log(`[LLM API Success] Generated ${completion.length.toLocaleString()} characters${tokensInfo}.\n`);
+
+    return { completion, usage };
+  }
+
+  static async generate(config: LLMConfig, systemPrompt: string, userPrompt: string): Promise<string> {
+    const result = await this.generateResult(config, systemPrompt, userPrompt);
+    return result.completion;
   }
 
   static async testConnection(config: LLMConfig): Promise<{ success: boolean; message: string }> {

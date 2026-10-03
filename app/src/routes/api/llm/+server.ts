@@ -24,8 +24,8 @@ export const POST: RequestHandler = async ({ request }) => {
       throw error(400, 'systemPrompt and userPrompt are required for generation');
     }
     try {
-      const completion = await LLMService.generate(config as LLMConfig, systemPrompt, userPrompt);
-      return json({ success: true, completion });
+      const result = await LLMService.generateResult(config as LLMConfig, systemPrompt, userPrompt);
+      return json({ success: true, completion: result.completion, usage: result.usage });
     } catch (err: any) {
       throw error(500, err?.message || 'LLM generation failed');
     }
