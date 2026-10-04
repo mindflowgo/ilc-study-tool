@@ -252,3 +252,51 @@ The project root coordinates both the SvelteKit 5 web app and Tauri v2 desktop a
 - `bun run build`: Typechecks and builds production bundles via SvelteKit.
 - `bun run parse`: Executes the Bun ingestion engine on `data/courses/` archives.
 - `bun run tauri:dev`: Builds the SvelteKit app and launches the native Tauri v2 macOS desktop window.
+
+---
+
+## 8. In-Place Text Selection & AI Post-It Note Annotations
+
+Students reading any course material (Full Lesson, Summary, Cheatsheet) can highlight or select text to ask contextual AI questions and attach persistent notes directly to the Markdown document.
+
+### 8.1 Workflow & Interaction Model
+1. **Highlight & Floating Trigger**:
+   - Selecting text within the reader pane activates a floating `[ ✨ Ask AI ]` pill positioned at selection coordinates.
+   - Clicking opens an AI query modal with an excerpt preview, custom question input, and 4 quick Ontario prompt chips (*"Explain simply"*, *"Why significant?"*, *"Exam takeaway"*, *"Real-world example"*).
+2. **Context-Aware Prompting**:
+   - The request dispatches to `/api/llm` with `sessionId: "${courseId}-note"`.
+   - The model receives the full lesson material as background context while prioritizing the specific excerpt and the student's question.
+3. **Markdown Callout Storage**:
+   - The answer is inserted after the annotated paragraph as a standard GFM callout:
+     ```markdown
+     > [!USERNOTE] Why is this principle significant in Ontario law?
+     > <!-- target: "statutory discretion must be exercised in good faith" -->
+     > **Roncarelli v. Duplessis** established that statutory discretion cannot be arbitrary...
+     ```
+   - Standard GFM callout syntax guarantees 100% interoperability with external Markdown editors and the built-in CodeMirror editor.
+4. **Interactive Reader View & Bidirectional Highlighting**:
+   - In reader mode, the note renders as a warm amber Post-It note card.
+   - The target snippet in the paragraph above is underlined with a dotted amber anchor (`<mark class="ai-note-anchor">`).
+   - Hovering over either the post-it note or the anchor text triggers synchronized highlighting.
+   - Clicking the anchor text smoothly scrolls to and expands the post-it note.
+   - Each note includes an inline `[✕]` action allowing instant deletion with disk synchronization.
+
+---
+
+## 9. Full-Page Document & PDF Viewer (`DocumentViewerModal`)
+
+When students click links to curriculum PDF worksheets, reference documents (e.g., *Canadian Charter of Rights and Freedoms* in `assets/locker_docs/`), or diagrams in the lesson Markdown:
+1. **In-App Full-Page Overlay**:
+   - Instead of navigating the entire browser or Tauri webview away from the study workspace, the click is intercepted.
+   - Opens a dedicated, full-screen document overlay (`DocumentViewerModal.svelte`).
+2. **Persistent Header Controls**:
+   - Displays the document title, file type badge (`PDF Document` / `Image`), and course title.
+   - Includes a **`[Back]`** button and a prominent **`[✕ Close]`** button that returns directly to the exact lesson scroll position.
+   - An external **`[Download]`** button allows saving the file or opening it in native desktop PDF viewers (Preview, Adobe Acrobat).
+3. **Multi-Modal Dismissal**:
+   - Students can dismiss the viewer and return to the lesson via:
+     - The top-bar **`[✕ Close]`** or **`[Back]`** button.
+     - The **`Escape`** keyboard shortcut.
+     - Browser or mouse back navigation (integrated with HTML5 `history.pushState` and `popstate` events).
+
+

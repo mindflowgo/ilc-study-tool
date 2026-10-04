@@ -8,10 +8,13 @@
   import UploadModal from '$lib/components/UploadModal.svelte';
   import PromptCard, { type VersionItem } from '$lib/components/PromptCard.svelte';
   import ConfigureLLMModal from '$lib/components/ConfigureLLMModal.svelte';
+  import SelectionToolbar from '$lib/components/SelectionToolbar.svelte';
+  import DocumentViewerModal from '$lib/components/DocumentViewerModal.svelte';
   import { parseFrontmatter, serializeWithFrontmatter } from '$lib/parser/frontmatter';
+  import { formatUserNote, insertAnnotationAfterText, removeAnnotation } from '$lib/parser/annotationInserter';
   import type { CourseManifest } from '$lib/parser/courseIngest';
   import type { LessonContentBundle, LessonFileVersion } from '$lib/server/courses';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import {
     BookOpen,
     FileText,
@@ -416,6 +419,127 @@
     }
   }
 
+  let pendingAnnotationQuery: { selectedText: string; query: string } | null = $state(null);
+
+  async function handleAnnotationSubmit(selectedText: string, query: string) {
+    let provider = '';
+    let baseUrl = '';
+    let model = '';
+    let apiKey = '';
+    let authHeaderType: 'bearer' | 'api_key' | 'both' = 'bearer';
+    let temperature = 0.3;
+
+    if (typeof localStorage !== 'undefined') {
+      provider = localStorage.getItem('ilc_llm_provider') || '';
+      baseUrl = localStorage.getItem('ilc_llm_baseUrl') || '';
+      model = localStorage.getItem('ilc_llm_model') || '';
+      apiKey = localStorage.getItem('ilc_llm_apiKey') || '';
+      authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
+      temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
+    }
+
+    if (!baseUrl) {
+      pendingAnnotationQuery = { selectedText, query };
+      isLLMModalOpen = true;
+      return;
+    }
+
+    isGeneratingAI = true;
+
+    try {
+      const sessionId = `${courseId}-note`;
+      const noteSystemPrompt =
+        'You are an expert Ontario secondary school tutor. A student studying course material has highlighted a specific passage and asked a question. Provide a concise, clear, and insightful answer directly addressing the question in the context of the Ontario curriculum and lesson material. Emphasize key terms, legal doctrines, or definitions in bold. Keep the answer focused (1 to 3 short paragraphs or bullet points). Do not repeat the student query or include conversational filler.';
+
+      const lessonContext = tabContents.lesson || tabContents[activeTab] || '';
+      const userPrompt = `Course: ${course?.title || courseId}\nLesson: ${currentLessonTitle}\n\nSelected Passage to Explain:\n"${selectedText}"\n\nStudent's Question:\n"${query}"\n\nFull Reference Context:\n${lessonContext}`;
+
+      console.log(`[ILC AI Note Request]`);
+      console.log(`- Session ID: ${sessionId}`);
+      console.log(`- Selected Excerpt: "${selectedText.slice(0, 100)}..."`);
+      console.log(`- User Query: "${query}"`);
+      console.log(`- User Prompt Length: ${userPrompt.length} characters`);
+
+      const res = await fetch('/api/llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate',
+          config: {
+            provider,
+            baseUrl,
+            apiKey,
+            authHeaderType,
+            model,
+            temperature,
+            sessionId
+          },
+          sessionId,
+          systemPrompt: noteSystemPrompt,
+          userPrompt
+        })
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`[ILC AI Note Error] Status: ${res.status}`, errText);
+        throw new Error(errText || 'AI Note generation failed');
+      }
+
+      const data = await res.json();
+      const aiAnswer = data.completion;
+      const usageInfo = data.usage?.total_tokens !== undefined ? ` | "total_tokens":${data.usage.total_tokens}` : '';
+      console.log(`[ILC AI Note Received] ${aiAnswer.length} characters${usageInfo}`);
+
+      const formattedNote = formatUserNote(query, selectedText, aiAnswer);
+      const currentContent = tabContents[activeTab] || '';
+      const { updatedMarkdown, success } = insertAnnotationAfterText(
+        currentContent,
+        selectedText,
+        formattedNote
+      );
+
+      if (success) {
+        tabContents[activeTab] = updatedMarkdown;
+        await saveCurrentTab();
+        saveSuccessMessage = '✨ AI Note added!';
+        setTimeout(() => {
+          saveSuccessMessage = '';
+        }, 3000);
+      } else {
+        alert('Could not locate the selected text in the document.');
+      }
+    } catch (err: any) {
+      alert('AI Note Error: ' + (err?.message || 'Check your LLM configuration.'));
+    } finally {
+      isGeneratingAI = false;
+      pendingAnnotationQuery = null;
+    }
+  }
+
+  function handleDeleteNote(targetText: string, query: string) {
+    const current = tabContents[activeTab] || '';
+    const { updatedMarkdown, removed } = removeAnnotation(current, targetText || query);
+    if (removed) {
+      tabContents[activeTab] = updatedMarkdown;
+      saveCurrentTab();
+      saveSuccessMessage = 'Note removed';
+      setTimeout(() => {
+        saveSuccessMessage = '';
+      }, 2000);
+    }
+  }
+
+  function handleLLMConfigured() {
+    if (pendingAnnotationQuery) {
+      const q = pendingAnnotationQuery;
+      pendingAnnotationQuery = null;
+      handleAnnotationSubmit(q.selectedText, q.query);
+    } else {
+      triggerAIGeneration(false);
+    }
+  }
+
   function handleCancelEdit() {
     tabContents[activeTab] = originalContents[activeTab];
     isEditing = false;
@@ -447,9 +571,41 @@
     }, 3000);
   }
 
+  // Full-page document / PDF viewer state
+  let activeDocument: { url: string; title: string } | null = $state(null);
+
+  function handleOpenDocument(url: string, title?: string) {
+    activeDocument = { url, title: title || url.split('/').pop() || 'Document' };
+    if (typeof window !== 'undefined') {
+      window.history.pushState({ docViewerOpen: true }, '');
+    }
+  }
+
+  function handleCloseDocument() {
+    activeDocument = null;
+    if (typeof window !== 'undefined' && window.history.state?.docViewerOpen) {
+      window.history.back();
+    }
+  }
+
+  function handlePopState() {
+    if (activeDocument) {
+      activeDocument = null;
+    }
+  }
+
   onMount(() => {
     loadPrompts();
     loadCourse();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('popstate', handlePopState);
+    }
+  });
+
+  onDestroy(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('popstate', handlePopState);
+    }
   });
 
   // Current lesson title
@@ -628,6 +784,8 @@
               <MarkdownViewer
                 markdown={parsedActiveTab.body}
                 courseId={course.id}
+                onDeleteNote={handleDeleteNote}
+                onOpenDocument={handleOpenDocument}
               />
             </article>
           {/if}
@@ -635,6 +793,23 @@
       {/if}
     </div>
   </div>
+
+  {#if !isEditing}
+    <SelectionToolbar
+      containerSelector=".markdown-body"
+      isGenerating={isGeneratingAI}
+      onSubmitQuery={handleAnnotationSubmit}
+    />
+  {/if}
+
+  {#if activeDocument}
+    <DocumentViewerModal
+      url={activeDocument.url}
+      title={activeDocument.title}
+      courseTitle={course.title}
+      onClose={handleCloseDocument}
+    />
+  {/if}
 
   <UploadModal
     isOpen={isUploadModalOpen}
@@ -646,6 +821,6 @@
   <ConfigureLLMModal
     isOpen={isLLMModalOpen}
     onClose={() => (isLLMModalOpen = false)}
-    onConfigured={() => triggerAIGeneration(false)}
+    onConfigured={handleLLMConfigured}
   />
 {/if}
