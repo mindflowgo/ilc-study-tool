@@ -23,7 +23,7 @@ export const POST: RequestHandler = async ({ request }) => {
     fs.mkdirSync(backupDir, { recursive: true });
 
     for (const file of files) {
-      if (file.name.endsWith('.zip')) {
+      if (/\.(zip|mhtml|mht|html|htm)$/i.test(file.name)) {
         const buffer = Buffer.from(await file.arrayBuffer());
         fs.writeFileSync(path.join(backupDir, file.name), buffer);
       }

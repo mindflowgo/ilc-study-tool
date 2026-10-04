@@ -299,4 +299,64 @@ When students click links to curriculum PDF worksheets, reference documents (e.g
      - The **`Escape`** keyboard shortcut.
      - Browser or mouse back navigation (integrated with HTML5 `history.pushState` and `popstate` events).
 
+---
+
+## 10. Multi-Format Lesson Ingestion Engine (.zip, .mhtml, .html)
+
+To support courses where lessons cannot be directly downloaded as standard SCORM packages, the ingestion engine seamlessly accepts browser-saved formats:
+
+### 10.1 Supported File Types
+1. **Standard ILC Zip Packages**:
+   - `clu3m_u1la2.html.zip` (original course package format).
+2. **Browser-Saved "Webpage, Complete" Zip Archives**:
+   - `<Title>.html` or `<Title>.htm` paired with `<Title>_files/` directory zipped together (e.g. `Learning activity 1.1 Introduction to accounting.zip`).
+   - Automatically detects and parses inner `intermediate.html` SCORM iframes.
+   - Extracts all local images, SVGs, and PDFs from `_files/` into standardized `assets/img/`, `assets/icons/`, and `assets/locker_docs/`.
+3. **Single File Web Archives (.mhtml / .mht)**:
+   - MIME multipart documents saved directly via Chrome, Edge, or Safari (e.g. `Learning activity 1.2_ Types of business organizations.mhtml`).
+   - Parses multipart boundaries, quoted-printable text, and base64-encoded binary attachments.
+   - Extracts embedded diagrams and illustrations directly to disk and normalizes image `src` references.
+4. **Standalone HTML Files & Companion Folders**:
+   - `.html` files placed alongside companion `_files` directories.
+
+### 10.2 Robust Unit & Lesson Metadata Resolution
+- Resolves unit numbers, lesson numbers, activity codes, and titles across divergent naming conventions (`u1la1`, `Learning activity 1.1`, `1.2 Types of business organizations`, or internal SCORM manifests).
+- Automatically converts root-level package files in `data/courses/<course_id>/` into `_backup/` for clean revision history and persistence.
+
+---
+
+## 11. Image Resizing & Interactive Scaling Controls
+
+Lesson content imported from brightspace or web downloads often contains oversized diagrams, balance sheets, and high-resolution screenshots that disrupt the reading flow. The tool provides both standard Markdown syntax extensions and interactive on-the-fly reader controls:
+
+### 11.1 Markdown Sizing Syntax Conventions
+1. **Obsidian / Logseq Pipe Syntax**:
+   - `![Alt Text|300](./assets/img/diagram.png)` -> Fixed width `300px`
+   - `![Alt Text|50%](./assets/img/chart.png)` -> Responsive width `50%`
+   - `![Alt Text|400x250](./assets/img/flow.png)` -> Width `400px`, height `250px`
+   - `![Alt Text|small](./assets/img/badge.png)` -> Named preset (`xs`: 160px, `sm`/`small`: 280px, `md`/`medium`: 480px, `lg`/`large`: 720px, `xl`/`full`: 100%)
+   - `![Alt Text|width=350px,height=200px](./assets/img/sheet.png)` -> Key-value parameters
+2. **Pandoc / Markdown-it Attribute Syntax**:
+   - `![Alt Text](./assets/img/diagram.png){width=350px}`
+   - `![Alt Text](./assets/img/chart.png){50%}`
+   - `![Alt Text](./assets/img/flow.png){400x250}`
+3. **Standard HTML**:
+   - `<img src="./assets/img/diagram.png" width="350" />` or `style="width: 50%;"`
+
+### 11.2 Interactive Reader Controls
+1. **Sensible Default Constraints**:
+   - Unconstrained images default to `max-height: 480px; width: auto; object-fit: contain;` centered within the reading pane, preventing tall or ultra-wide images from overwhelming the lesson text.
+2. **Floating Quick-Scale Toolbar**:
+   - Hovering over any content image presents a floating action pill in the top-right corner:
+     `[ Size: Auto | 25% | 50% | 75% | 100% | ⛶ Full ]`
+   - Clicking a percentage chip (`25%`, `50%`, `75%`, `100%`) dynamically resizes the image immediately in real-time.
+   - Clicking `Auto` resets the image to the default balanced container fit.
+   - Tooltips on each chip display the corresponding Markdown syntax to make learning the syntax seamless.
+3. **Full-Page Zoom & Inspection**:
+   - Clicking **`[⛶ Full]`** or clicking directly on the image opens it in the full-page `DocumentViewerModal`, enabling pan/zoom, high-detail inspection, and downloading.
+4. **Intelligent Icon Detection**:
+   - SVG icons, buttons, and badges (`assets/icons/`, `think.svg`, `rubric_button.svg`) are automatically styled inline without giant margins or scale toolbars, keeping curriculum navigation crisp and uncluttered.
+
+
+
 

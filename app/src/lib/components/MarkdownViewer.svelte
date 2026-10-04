@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { marked } from 'marked';
+  import { Marked } from 'marked';
   import katex from 'katex';
 
   interface Props {
@@ -22,13 +22,168 @@
       .replace(/'/g, '&#39;');
   }
 
+  interface ImageSpec {
+    alt: string;
+    width: string | null;
+    height: string | null;
+    isCustom: boolean;
+  }
+
+  function parseImageSpec(rawText: string): ImageSpec {
+    const pipeIndex = rawText.lastIndexOf('|');
+    if (pipeIndex === -1) {
+      return { alt: rawText.trim(), width: null, height: null, isCustom: false };
+    }
+
+    const alt = rawText.slice(0, pipeIndex).trim();
+    const spec = rawText.slice(pipeIndex + 1).trim().toLowerCase();
+
+    let width: string | null = null;
+    let height: string | null = null;
+
+    if (spec === 'xs' || spec === 'thumb') width = '160px';
+    else if (spec === 'sm' || spec === 'small') width = '280px';
+    else if (spec === 'md' || spec === 'medium') width = '480px';
+    else if (spec === 'lg' || spec === 'large') width = '720px';
+    else if (spec === 'full' || spec === 'xl') width = '100%';
+    else if (/^(\d+(?:px|%|rem)?)\s*x\s*(\d+(?:px|%|rem)?)$/.test(spec)) {
+      const m = spec.match(/^(\d+(?:px|%|rem)?)\s*x\s*(\d+(?:px|%|rem)?)$/);
+      if (m) {
+        width = m[1].endsWith('%') || m[1].endsWith('px') || m[1].endsWith('rem') ? m[1] : m[1] + 'px';
+        height = m[2].endsWith('%') || m[2].endsWith('px') || m[2].endsWith('rem') ? m[2] : m[2] + 'px';
+      }
+    } else {
+      const wm = spec.match(/\b(?:width|w)=([0-9]+(?:%|px|rem)?)/i);
+      const hm = spec.match(/\b(?:height|h)=([0-9]+(?:%|px|rem)?)/i);
+      if (wm) {
+        width = wm[1].endsWith('%') || wm[1].endsWith('px') || wm[1].endsWith('rem') ? wm[1] : wm[1] + 'px';
+      }
+      if (hm) {
+        height = hm[1].endsWith('%') || hm[1].endsWith('px') || hm[1].endsWith('rem') ? hm[1] : hm[1] + 'px';
+      }
+      if (!width && !height) {
+        if (/^\d+(?:%|px|rem)$/.test(spec)) {
+          width = spec;
+        } else if (/^\d+$/.test(spec)) {
+          width = spec + 'px';
+        }
+      }
+    }
+
+    return { alt, width, height, isCustom: Boolean(width || height) };
+  }
+
+  function renderCustomImage(href: string, text: string | null | undefined, title?: string | null): string {
+    const rawText = text || '';
+    const spec = parseImageSpec(rawText);
+    const cleanAlt = spec.alt;
+
+    const isIcon =
+      href.includes('/assets/icons/') ||
+      href.includes('/icons/') ||
+      (href.endsWith('.svg') && !spec.isCustom && !href.includes('/img/')) ||
+      /\b(icon|badge|button)\b/i.test(cleanAlt);
+
+    if (isIcon) {
+      let iconStyle = '';
+      if (spec.width) iconStyle += `width: ${spec.width}; `;
+      if (spec.height) iconStyle += `height: ${spec.height}; `;
+      return `<img src="${href}" alt="${escapeHtml(cleanAlt)}" class="inline-block align-middle my-0.5 border-0 rounded-none shadow-none max-h-8 w-auto max-w-full" style="${iconStyle.trim()}" loading="lazy" />`;
+    }
+
+    let styleParts: string[] = [];
+    if (spec.width) styleParts.push(`width: ${spec.width};`);
+    if (spec.height) styleParts.push(`height: ${spec.height};`);
+    if (!spec.width && !spec.height) {
+      styleParts.push('max-height: 480px; width: auto;');
+    }
+    const styleAttr = styleParts.join(' ');
+    const showCaption = cleanAlt && !/\.(jpe?g|png|gif|webp|svg)$/i.test(cleanAlt);
+
+    return `<span class="image-container not-prose my-6 mx-auto block text-center group/img relative select-none">
+  <span class="image-inner inline-block relative max-w-full">
+    <img
+      src="${href}"
+      alt="${escapeHtml(cleanAlt)}"
+      class="image-resizable rounded-xl border border-stone-200/90 bg-stone-50 shadow-xs hover:shadow-md transition-all duration-200 mx-auto cursor-zoom-in block max-w-full"
+      style="${styleAttr}"
+      loading="lazy"
+    />
+    <span class="image-toolbar absolute top-2 right-2 opacity-0 group-hover/img:opacity-100 transition-opacity duration-150 bg-stone-900/90 backdrop-blur-md text-white rounded-lg shadow-md px-1.5 py-1 flex items-center gap-1 text-[11px] font-medium z-10 pointer-events-auto">
+      <span class="text-[10px] text-stone-400 font-semibold px-1 select-none uppercase tracking-wider">Size</span>
+      <button
+        type="button"
+        data-action="scale-img"
+        data-scale="auto"
+        title="Reset to default fit"
+        class="scale-chip px-1.5 py-0.5 rounded ${!spec.width ? 'bg-amber-500 text-white font-semibold' : 'text-stone-300'} hover:text-white hover:bg-stone-800 transition active:scale-95 cursor-pointer"
+      >Auto</button>
+      <button
+        type="button"
+        data-action="scale-img"
+        data-scale="25%"
+        title="Scale to 25% (Markdown: ![alt|25%](...))"
+        class="scale-chip px-1.5 py-0.5 rounded ${spec.width === '25%' ? 'bg-amber-500 text-white font-semibold' : 'text-stone-300'} hover:text-white hover:bg-stone-800 transition active:scale-95 cursor-pointer"
+      >25%</button>
+      <button
+        type="button"
+        data-action="scale-img"
+        data-scale="50%"
+        title="Scale to 50% (Markdown: ![alt|50%](...))"
+        class="scale-chip px-1.5 py-0.5 rounded ${spec.width === '50%' ? 'bg-amber-500 text-white font-semibold' : 'text-stone-300'} hover:text-white hover:bg-stone-800 transition active:scale-95 cursor-pointer"
+      >50%</button>
+      <button
+        type="button"
+        data-action="scale-img"
+        data-scale="75%"
+        title="Scale to 75% (Markdown: ![alt|75%](...))"
+        class="scale-chip px-1.5 py-0.5 rounded ${spec.width === '75%' ? 'bg-amber-500 text-white font-semibold' : 'text-stone-300'} hover:text-white hover:bg-stone-800 transition active:scale-95 cursor-pointer"
+      >75%</button>
+      <button
+        type="button"
+        data-action="scale-img"
+        data-scale="100%"
+        title="Scale to 100% (Markdown: ![alt|100%](...))"
+        class="scale-chip px-1.5 py-0.5 rounded ${spec.width === '100%' ? 'bg-amber-500 text-white font-semibold' : 'text-stone-300'} hover:text-white hover:bg-stone-800 transition active:scale-95 cursor-pointer"
+      >100%</button>
+      <span class="w-px h-3.5 bg-stone-700 mx-0.5"></span>
+      <button
+        type="button"
+        data-action="view-fullscreen"
+        title="Open full size in document viewer"
+        class="px-1.5 py-0.5 rounded text-stone-300 hover:text-white hover:bg-stone-800 transition active:scale-95 cursor-pointer flex items-center gap-1"
+      >
+        <span class="text-xs">⛶</span>
+        <span>Full</span>
+      </button>
+    </span>
+  </span>
+  ${showCaption ? `<span class="block text-xs text-stone-500 mt-2 font-normal italic select-none">${escapeHtml(cleanAlt)}</span>` : ''}
+</span>`;
+  }
+
+  const markedParser = new Marked({ gfm: true, breaks: true });
+  markedParser.use({
+    renderer: {
+      image(token) {
+        return renderCustomImage(token.href, token.text, token.title);
+      }
+    }
+  });
+
   let renderedHtml = $derived.by(() => {
     if (!markdown) return '';
 
     // 1. Strip YAML frontmatter
     let cleaned = markdown.replace(/^---[\s\S]*?---\s*/, '');
 
-    // 2. Rewrite image and document paths to point to API route
+    // 2. Normalize Pandoc/Markdown-it attribute syntax: ![alt](url){width=300px} -> ![alt|width=300px](url)
+    cleaned = cleaned.replace(
+      /!\[(.*?)\]\((.*?)\)\{([^}]+)\}/g,
+      (match, alt, url, attr) => `![${alt}|${attr.trim()}](${url})`
+    );
+
+    // 3. Rewrite image and document paths to point to API route
     cleaned = cleaned.replace(
       /(?:src|href)=["'](?:\.\/)?assets\/(.*?)["']/gi,
       `src="/api/courses/${courseId}/assets/$1"`
@@ -42,7 +197,7 @@
       `[$1](/api/courses/${courseId}/assets/$2)`
     );
 
-    // 3. Process GFM Callouts: > [!NOTE], > [!TIP], > [!IMPORTANT], > [!WARNING], > [!CAUTION]
+    // 4. Process GFM Callouts: > [!NOTE], > [!TIP], > [!IMPORTANT], > [!WARNING], > [!CAUTION]
     cleaned = cleaned.replace(
       /> \[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*\n((?:>.*(?:\n|$))*)/gi,
       (match, type, content) => {
@@ -52,7 +207,7 @@
       }
     );
 
-    // 4. Process GFM AI Post-It Notes: > [!USERNOTE] <query>\n> <!-- target: "..." -->\n> body...
+    // 5. Process GFM AI Post-It Notes: > [!USERNOTE] <query>\n> <!-- target: "..." -->\n> body...
     const userNotes: string[] = [];
     cleaned = cleaned.replace(
       />\s*\[!USERNOTE\]([^\n]*)\n((?:>.*(?:\n|$))*)/gi,
@@ -68,7 +223,7 @@
         }
 
         const bodyMarkdown = cleanBlock.replace(/<!--\s*target:\s*[\s\S]*?-->/gi, '').trim();
-        let bodyHtml = marked.parse(bodyMarkdown, { gfm: true, breaks: true }) as string;
+        let bodyHtml = markedParser.parse(bodyMarkdown) as string;
 
         // Render KaTeX formulas in body if any
         bodyHtml = bodyHtml.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
@@ -135,8 +290,8 @@
       }
     );
 
-    // 5. Render Markdown via marked
-    let html = marked.parse(cleaned, { gfm: true, breaks: true }) as string;
+    // 5. Render Markdown via markedParser
+    let html = markedParser.parse(cleaned) as string;
 
     // 6. Render KaTeX formulas if present
     html = html.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
@@ -287,7 +442,10 @@
   }
 
   function handleContainerClick(e: MouseEvent) {
-    const delBtn = (e.target as HTMLElement).closest('[data-action="delete-note"]');
+    const targetEl = e.target as HTMLElement;
+
+    // 1. Delete AI Study Note
+    const delBtn = targetEl.closest('[data-action="delete-note"]');
     if (delBtn) {
       e.preventDefault();
       e.stopPropagation();
@@ -299,7 +457,65 @@
       return;
     }
 
-    const link = (e.target as HTMLElement).closest('a');
+    // 2. Interactive Image Sizing Chip
+    const scaleBtn = targetEl.closest('[data-action="scale-img"]');
+    if (scaleBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const scale = scaleBtn.getAttribute('data-scale') || 'auto';
+      const container = scaleBtn.closest('.image-container');
+      const img = container?.querySelector<HTMLImageElement>('img.image-resizable');
+      if (img) {
+        if (scale === 'auto') {
+          img.style.width = '';
+          img.style.maxHeight = '480px';
+          img.style.height = 'auto';
+        } else {
+          img.style.width = scale;
+          img.style.maxWidth = '100%';
+          img.style.maxHeight = 'none';
+          img.style.height = 'auto';
+        }
+
+        // Highlight active scale button in this toolbar
+        const chips = container?.querySelectorAll<HTMLElement>('.scale-chip');
+        chips?.forEach((c) => {
+          c.classList.remove('bg-amber-500', 'text-white', 'font-semibold');
+          c.classList.add('text-stone-300');
+        });
+        scaleBtn.classList.remove('text-stone-300');
+        scaleBtn.classList.add('bg-amber-500', 'text-white', 'font-semibold');
+      }
+      return;
+    }
+
+    // 3. View Fullscreen Image in Document Viewer
+    const viewBtn = targetEl.closest('[data-action="view-fullscreen"]');
+    if (viewBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const container = viewBtn.closest('.image-container');
+      const img = container?.querySelector<HTMLImageElement>('img.image-resizable');
+      if (img && img.src) {
+        onOpenDocument?.(img.src, img.alt || 'Image Preview');
+      }
+      return;
+    }
+
+    // 4. Direct click on resizable image (zoom into modal viewer)
+    const targetImg = targetEl.closest('img.image-resizable') as HTMLImageElement | null;
+    if (targetImg && targetImg.src) {
+      const anchor = targetImg.closest('a');
+      if (!anchor) {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenDocument?.(targetImg.src, targetImg.alt || 'Image Preview');
+        return;
+      }
+    }
+
+    // 5. Document / External Link Navigation
+    const link = targetEl.closest('a');
     if (link) {
       const href = link.getAttribute('href');
       if (!href) return;
@@ -374,5 +590,19 @@
   :global(.ai-note-anchor.ai-note-anchor-open) {
     background-color: rgba(254, 240, 138, 0.75);
     border-bottom-style: solid;
+  }
+
+  /* Don't show floating toolbar if image is an anchor button */
+  :global(a .image-toolbar) {
+    display: none !important;
+  }
+
+  :global(a .image-resizable) {
+    cursor: pointer !important;
+  }
+
+  :global(a .image-container) {
+    display: inline-block;
+    margin: 0.25rem 0;
   }
 </style>

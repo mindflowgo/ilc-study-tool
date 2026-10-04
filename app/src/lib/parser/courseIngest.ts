@@ -78,9 +78,21 @@ export class CourseIngest {
     const metaPath = path.join(courseDir, 'meta.json');
 
     fs.mkdirSync(assetsDir, { recursive: true });
+    fs.mkdirSync(backupDir, { recursive: true });
 
-    if (!fs.existsSync(backupDir)) {
-      throw new Error(`Backup directory not found at: ${backupDir}`);
+    // Check courseDir root for any directly placed packages (.zip, .mhtml, .mht, .html)
+    // and copy them into _backup/ so they are tracked and processed
+    if (fs.existsSync(courseDir)) {
+      const rootFiles = fs.readdirSync(courseDir);
+      for (const rf of rootFiles) {
+        if (/\.(zip|mhtml|mht)$/i.test(rf) && !rf.startsWith('.')) {
+          const src = path.join(courseDir, rf);
+          const dest = path.join(backupDir, rf);
+          if (!fs.existsSync(dest)) {
+            fs.copyFileSync(src, dest);
+          }
+        }
+      }
     }
 
     // Load existing manifest if present to preserve custom course titles & descriptions
@@ -93,20 +105,39 @@ export class CourseIngest {
       }
     }
 
-    const zipFiles = fs
+    const packageFiles = fs
       .readdirSync(backupDir)
-      .filter((f) => f.endsWith('.zip'))
+      .filter((f) => /\.(zip|mhtml|mht|html|htm)$/i.test(f) && !f.startsWith('.'))
       .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
     const lessonsMap: Map<string, CourseManifestLesson> = new Map();
     const newLessonsAdded: string[] = [];
 
+    const courseUnitDefaults: Record<string, Record<number, string>> = {
+      clu3m: {
+        1: 'Heritage & Legal Foundations',
+        2: 'Rights & Freedoms',
+        3: 'Criminal Law & Justice System',
+        4: 'Civil Law & Dispute Resolution',
+        5: 'Culminating & Independent Inquiry'
+      },
+      baf3m: {
+        1: 'Fundamental Accounting Practices',
+        2: 'Advanced Accounting Procedures',
+        3: 'Internal Control & Financial Analysis',
+        4: 'Accounting for Merchandising & Service',
+        5: 'Culminating Activity'
+      }
+    };
+
     const unitTitles: Record<number, string> = {
-      1: 'Heritage & Legal Foundations',
-      2: 'Rights & Freedoms',
-      3: 'Criminal Law & Justice System',
-      4: 'Civil Law & Dispute Resolution',
-      5: 'Culminating & Independent Inquiry'
+      ...(courseUnitDefaults[courseId] || {
+        1: 'Unit 1: Foundations',
+        2: 'Unit 2: Core Concepts',
+        3: 'Unit 3: Applied Principles',
+        4: 'Unit 4: Advanced Topics',
+        5: 'Unit 5: Culminating'
+      })
     };
 
     // Populate existing unit titles from manifest if available
@@ -118,16 +149,14 @@ export class CourseIngest {
       }
     }
 
-    for (const zipFile of zipFiles) {
-      const zipPath = path.join(backupDir, zipFile);
-      const zipBasename = path.basename(zipFile);
+    for (const pkgFile of packageFiles) {
+      const pkgPath = path.join(backupDir, pkgFile);
 
-      // Identify unit and lesson numbers
-      const match = zipBasename.match(/u(\d+)la(\d+)(?:_assign(\d+))?/i);
-      const unitNumber = match ? parseInt(match[1], 10) : 1;
-      const lessonNumber = match ? parseInt(match[2], 10) : 1;
-      const isAssignment = zipBasename.includes('assign') || !!(match && match[3]);
+      // Extract using universal ArchiveExtractor (.zip, .mhtml, .html)
+      const extracted = ArchiveExtractor.extract(pkgPath, assetsDir);
+      if (!extracted) continue;
 
+      const { unitNumber, lessonNumber, isAssignment, activityCode } = extracted;
       const unitNumStr = String(unitNumber).padStart(2, '0');
       const lessonNumStr = String(lessonNumber).padStart(2, '0');
       const lessonId = isAssignment
@@ -140,7 +169,7 @@ export class CourseIngest {
 
       // If lesson already exists and overwrite is false, preserve existing files and register
       if (isExistingLesson && !overwriteExisting) {
-        let lessonTitle = `${isAssignment ? 'Assignment' : 'Lesson'} ${unitNumber}.${lessonNumber}`;
+        let lessonTitle = extracted.title || `${isAssignment ? 'Assignment' : 'Lesson'} ${unitNumber}.${lessonNumber}`;
         try {
           const content = fs.readFileSync(lessonFilePath, 'utf8');
           const titleMatch = content.match(/^title:\s*['"]?(.*?)['"]?$/m);
@@ -149,7 +178,7 @@ export class CourseIngest {
 
         lessonsMap.set(lessonId, {
           id: lessonId,
-          code: zipBasename.replace(/\.html\.zip$/i, '').replace(/\.zip$/i, ''),
+          code: activityCode,
           title: lessonTitle,
           unitNumber,
           lessonNumber,
@@ -161,10 +190,6 @@ export class CourseIngest {
         });
         continue;
       }
-
-      // New lesson or overwrite requested: extract and parse
-      const extracted = ArchiveExtractor.extractZip(zipPath, assetsDir);
-      if (!extracted) continue;
 
       const cleaned = DomCleaner.clean(extracted.htmlContent);
       const unitTitle = unitTitles[extracted.unitNumber] || `Unit ${extracted.unitNumber}`;
@@ -290,10 +315,13 @@ export class CourseIngest {
         lessons: lessons.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
       }));
 
+    const courseTitles: Record<string, string> = {
+      clu3m: 'CLU3M: Understanding Canadian Law',
+      baf3m: 'BAF3M: Financial Accounting Fundamentals'
+    };
+
     const defaultTitle =
-      courseId.toUpperCase() === 'CLU3M'
-        ? 'CLU3M: Understanding Canadian Law'
-        : `${courseId.toUpperCase()}: Course Study Guide`;
+      courseTitles[courseId] || `${courseId.toUpperCase()}: Course Study Guide`;
 
     const manifest: CourseManifest = {
       id: courseId,

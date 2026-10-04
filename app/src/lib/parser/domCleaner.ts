@@ -16,31 +16,36 @@ export class DomCleaner {
     const h1Title = $('h1').first().text().trim();
     const title = pageTitle || h1Title || 'ILC Lesson';
 
-    // 2. Extract Learning Goals & Success Criteria
+    // 2. Extract Learning Goals & Success Criteria (recursively traversing all descendants)
     const learningGoals: string[] = [];
     const successCriteria: string[] = [];
 
-    $('#ilcLearningGoals').each((_, el) => {
-      const container = $(el);
+    $('#ilcLearningGoals').each((_, container) => {
       let isSuccessCriteria = false;
 
-      container.children().each((__, child) => {
-        const text = $(child).text().trim().toLowerCase();
-        if (text.includes('success criteria')) {
-          isSuccessCriteria = true;
-        } else if ($(child).is('ul, ol')) {
-          $(child).find('li').each((___, li) => {
-            const item = $(li).text().trim();
-            if (item) {
-              if (isSuccessCriteria) {
-                successCriteria.push(item);
-              } else {
-                learningGoals.push(item);
-              }
-            }
-          });
-        }
-      });
+      $(container)
+        .find('h2, h3, p, ul, ol')
+        .each((__, el) => {
+          const text = $(el).text().trim().toLowerCase();
+          if (text.includes('success criteria')) {
+            isSuccessCriteria = true;
+          } else if (text.includes('learning goal')) {
+            isSuccessCriteria = false;
+          } else if ($(el).is('ul, ol')) {
+            $(el)
+              .find('li')
+              .each((___, li) => {
+                const item = $(li).text().trim();
+                if (item) {
+                  if (isSuccessCriteria) {
+                    successCriteria.push(item);
+                  } else {
+                    learningGoals.push(item);
+                  }
+                }
+              });
+          }
+        });
     });
 
     // Replace #ilcLearningGoals with a formatted callout element in DOM
@@ -87,29 +92,34 @@ export class DomCleaner {
     // 5. Rewrite Asset and Document Links
     $('img').each((_, img) => {
       const src = $(img).attr('src') || '';
-      if (src.includes('assets/img/')) {
-        const filename = src.split('assets/img/').pop();
-        $(img).attr('src', `./assets/img/${filename}`);
-      } else if (src.includes('assets/icons/')) {
-        const filename = src.split('assets/icons/').pop();
+      if (!src) return;
+      if (src.startsWith('./assets/')) return;
+      const filename = src.split('?')[0].split('/').pop() || '';
+      if (!filename) return;
+
+      if (/\.svg$/i.test(filename)) {
         $(img).attr('src', `./assets/icons/${filename}`);
+      } else if (/\.(png|jpe?g|gif|webp)$/i.test(filename)) {
+        $(img).attr('src', `./assets/img/${filename}`);
       }
     });
 
     $('a').each((_, link) => {
       const href = $(link).attr('href') || '';
-      if (href.includes('assets/locker_docs/')) {
-        const filename = href.split('assets/locker_docs/').pop();
+      if (!href) return;
+      if (href.startsWith('#') || href.startsWith('./assets/')) return;
+      const filename = href.split('?')[0].split('/').pop() || '';
+      if (/\.(pdf|docx?|xlsx?|pptx?)$/i.test(filename)) {
         $(link).attr('href', `./assets/locker_docs/${filename}`);
       }
     });
 
     // 6. Remove scripts, styles, noscript, and D2L navigation chrome
     $('script, style, noscript, link[rel="stylesheet"]').remove();
-    $('.sr-only, .hidden').remove();
+    $('nav, .navbar, progress, button.btn-ilc-drawer, button.btn-ilc-close, .sr-only, .hidden').remove();
 
     // 7. Get main content
-    const mainEl = $('main#mainContent, #mainContent, body').first();
+    const mainEl = $('main#mainContent, #mainContent, .mainContent, main, body').first();
     const cleanedHtml = mainEl.length ? mainEl.html() || '' : $('body').html() || '';
 
     return {

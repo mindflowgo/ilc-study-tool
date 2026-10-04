@@ -25,7 +25,7 @@
   function handleFileSelect(e: Event) {
     const target = e.target as HTMLInputElement;
     if (target.files) {
-      selectedFiles = Array.from(target.files).filter((f) => f.name.endsWith('.zip'));
+      selectedFiles = Array.from(target.files).filter((f) => /\.(zip|mhtml|mht|html|htm)$/i.test(f.name));
     }
   }
 
@@ -33,13 +33,13 @@
     e.preventDefault();
     isDragging = false;
     if (e.dataTransfer?.files) {
-      selectedFiles = Array.from(e.dataTransfer.files).filter((f) => f.name.endsWith('.zip'));
+      selectedFiles = Array.from(e.dataTransfer.files).filter((f) => /\.(zip|mhtml|mht|html|htm)$/i.test(f.name));
     }
   }
 
   async function uploadFiles() {
     if (!selectedFiles.length) {
-      errorMessage = 'Please select at least one .zip file.';
+      errorMessage = 'Please select at least one lesson file (.zip, .mhtml, .html).';
       return;
     }
 
@@ -146,14 +146,14 @@
           <label for="zip-files" class="font-semibold text-stone-900 hover:underline cursor-pointer">
             Browse files
           </label>
-          or drag & drop lesson .zip archives
+          or drag & drop lesson files (.zip, .mhtml, .html)
         </div>
-        <p class="text-[11px] text-stone-400">Select one or multiple ILC lesson zip packages</p>
+        <p class="text-[11px] text-stone-400">Supports ILC packages, browser-saved complete page zips, and MHTML archives</p>
         <input
           id="zip-files"
           type="file"
           multiple
-          accept=".zip"
+          accept=".zip,.mhtml,.mht,.html,.htm"
           onchange={handleFileSelect}
           class="hidden"
         />
