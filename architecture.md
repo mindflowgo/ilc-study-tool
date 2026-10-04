@@ -357,6 +357,39 @@ Lesson content imported from brightspace or web downloads often contains oversiz
 4. **Intelligent Icon Detection**:
    - SVG icons, buttons, and badges (`assets/icons/`, `think.svg`, `rubric_button.svg`) are automatically styled inline without giant margins or scale toolbars, keeping curriculum navigation crisp and uncluttered.
 
+---
+
+## 12. CodeMirror Live Preview (Obsidian-Style WYSIWYG Editor)
+
+Adapted from the architecture in [`nuza`](file:///Users/fil/Code/misc/nuza), the CodeMirror editor (`app/src/lib/editor`) provides an **Obsidian-style Live Preview** writing experience directly in the study tool:
+
+### 12.1 Interactive In-Place Markdown Rendering
+1. **Headings (`#`, `##`, `###`)**:
+   - Render with authentic proportional scale, weight, and hierarchy.
+   - When the cursor is off the line, the leading `#` hashes disappear.
+   - Placing the caret anywhere on the line reveals the `#` hashes dimmed (`cm-md-mark`), allowing immediate editing without breaking layout.
+2. **Inline Formatting (Bold, Italic, Strikethrough, Inline Code)**:
+   - Formatted inline as rich text (`**bold**` as bold, `*italic*` as italic, `` `code` `` as a styled chip).
+   - Markdown markers fold away when not selected and reveal smoothly when the cursor touches the word or line.
+3. **Links (`[title](url)`)**:
+   - Rendered as blue styled links with subtle underlines.
+   - The URL and brackets hide when the cursor is elsewhere.
+   - **Mod-Click** (`Cmd-Click` on macOS, `Ctrl-Click` on Windows/Linux) opens links in a new browser tab.
+4. **Lists & Tasks**:
+   - Bullet items (`- `, `* `) render with clean glyphs (`•`, `◦`, `▪`).
+   - Tasks (`- [ ]`, `- [x]`) render as interactive, clickable checkboxes. Clicking the checkbox toggles `[ ]` $\leftrightarrow$ `[x]` directly in the underlying Markdown text with smooth animated transitions.
+   - Checked tasks automatically gain line strikethrough.
+   - Pressing **`Enter`** automatically continues the list or task, and renumbers ordered lists. Pressing **`Enter`** on an empty item cleanly exits the list.
+5. **Interactive GFM Tables**:
+   - Render as formatted HTML tables with borders, headers, and column alignments.
+   - Clicking any cell turns it into an editable field right inside the table, saving changes back to the Markdown document. Double-clicking reveals the raw Markdown table.
+6. **Images (`![alt](url)`)**:
+   - Render live inside the editor with support for both web URLs and course assets (`./assets/...` resolved to `/api/courses/${courseId}/assets/...`).
+   - Respects Obsidian pipe sizing (`![alt|300](url)`, `![alt|50%](url)`).
+7. **YAML Frontmatter (`---`)**:
+   - Renders as a structured Properties form displaying key-value metadata, with inline editing, deletion, and property additions. Placing the cursor inside reveals the raw YAML text.
+
+
 
 
 

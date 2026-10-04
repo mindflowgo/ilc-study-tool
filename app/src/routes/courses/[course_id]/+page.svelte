@@ -766,6 +766,7 @@
               <div class="h-[calc(100vh-16rem)]">
                 <CodeMirrorEditor
                   value={tabContents[activeTab]}
+                  courseId={course.id}
                   onChange={handleEditorChange}
                   onSave={handleSaveEdit}
                 />
