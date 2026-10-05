@@ -1,14 +1,25 @@
 <script lang="ts">
-  import { Upload, X, FileArchive, CheckCircle2, AlertCircle, Loader2, Plus } from 'lucide-svelte';
+  import { Upload, X, FileArchive, CheckCircle2, AlertCircle, Loader2, Plus, RefreshCw } from 'lucide-svelte';
 
   interface Props {
     isOpen: boolean;
     presetCourseId?: string;
+    mode?: 'add' | 'replace';
+    targetLessonId?: string;
+    targetLessonTitle?: string;
     onClose: () => void;
     onUploaded: (courseId: string) => void;
   }
 
-  let { isOpen, presetCourseId = '', onClose, onUploaded }: Props = $props();
+  let {
+    isOpen,
+    presetCourseId = '',
+    mode = 'add',
+    targetLessonId = '',
+    targetLessonTitle = '',
+    onClose,
+    onUploaded
+  }: Props = $props();
 
   let courseId = $state('');
   let selectedFiles: File[] = $state([]);
@@ -49,6 +60,10 @@
     const formData = new FormData();
     const finalCourseId = (courseId || presetCourseId).trim().toLowerCase() || 'course_' + Date.now();
     formData.append('courseId', finalCourseId);
+    formData.append('mode', mode);
+    if (mode === 'replace' && targetLessonId) {
+      formData.append('targetLessonId', targetLessonId);
+    }
 
     for (const file of selectedFiles) {
       formData.append('files', file);
@@ -85,8 +100,10 @@
       <!-- Modal Header -->
       <div class="flex items-center justify-between pb-3 border-b border-stone-100">
         <div class="flex items-center space-x-2">
-          <div class="p-1.5 rounded-lg bg-stone-100 text-stone-700">
-            {#if presetCourseId}
+          <div class="p-1.5 rounded-lg {mode === 'replace' ? 'bg-amber-50 text-amber-600' : 'bg-stone-100 text-stone-700'}">
+            {#if mode === 'replace'}
+              <RefreshCw class="w-4 h-4" />
+            {:else if presetCourseId}
               <Plus class="w-4 h-4" />
             {:else}
               <Upload class="w-4 h-4" />
@@ -94,10 +111,22 @@
           </div>
           <div>
             <h2 class="text-sm font-semibold text-stone-900">
-              {presetCourseId ? `Add Chapters to ${presetCourseId.toUpperCase()}` : 'Upload Course Package'}
+              {#if mode === 'replace'}
+                Replace Chapter {targetLessonTitle ? `(${targetLessonTitle})` : targetLessonId}
+              {:else if presetCourseId}
+                Add Chapters to {presetCourseId.toUpperCase()}
+              {:else}
+                Upload Course Package
+              {/if}
             </h2>
             <p class="text-[11px] text-stone-400">
-              {presetCourseId ? 'New chapters will be parsed and merged into this course.' : 'Ingest a course package of ILC lessons.'}
+              {#if mode === 'replace'}
+                Upload a replacement package (.zip, .mhtml, .html) for this chapter.
+              {:else if presetCourseId}
+                New chapters will be parsed and merged into this course.
+              {:else}
+                Ingest a course package of ILC lessons.
+              {/if}
             </p>
           </div>
         </div>
@@ -199,7 +228,10 @@
           >
             {#if isUploading}
               <Loader2 class="w-3.5 h-3.5 animate-spin" />
-              <span>Ingesting...</span>
+              <span>{mode === 'replace' ? 'Replacing...' : 'Ingesting...'}</span>
+            {:else if mode === 'replace'}
+              <RefreshCw class="w-3.5 h-3.5" />
+              <span>Replace Chapter & Parse</span>
             {:else}
               <Upload class="w-3.5 h-3.5" />
               <span>{presetCourseId ? 'Add Chapters & Parse' : 'Ingest & Parse'}</span>

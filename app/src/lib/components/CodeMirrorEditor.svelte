@@ -1,7 +1,19 @@
 <script lang="ts">
   import { EditorView, drawSelection, dropCursor } from '@codemirror/view';
   import { EditorState } from '@codemirror/state';
-  import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+  import {
+    defaultKeymap,
+    history,
+    historyKeymap,
+    cursorLineBoundaryLeft,
+    cursorLineBoundaryRight,
+    selectLineBoundaryLeft,
+    selectLineBoundaryRight,
+    cursorDocStart,
+    cursorDocEnd,
+    selectDocStart,
+    selectDocEnd
+  } from '@codemirror/commands';
   import { bracketMatching } from '@codemirror/language';
   import { keymap } from '@codemirror/view';
   import { onMount } from 'svelte';
@@ -23,6 +35,49 @@
   onMount(() => {
     lastValue = value || '';
 
+    const isolateArrowEvents = EditorView.domEventHandlers({
+      keydown(event) {
+        if (event.metaKey || event.ctrlKey) {
+          if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+            // Stop propagation to prevent any outer/window listeners from intercepting line/doc caret movement
+            event.stopPropagation();
+          }
+        }
+        return false;
+      }
+    });
+
+    const editorNavigationKeymap = keymap.of([
+      {
+        key: 'Mod-ArrowLeft',
+        mac: 'Cmd-ArrowLeft',
+        run: cursorLineBoundaryLeft,
+        shift: selectLineBoundaryLeft,
+        preventDefault: true
+      },
+      {
+        key: 'Mod-ArrowRight',
+        mac: 'Cmd-ArrowRight',
+        run: cursorLineBoundaryRight,
+        shift: selectLineBoundaryRight,
+        preventDefault: true
+      },
+      {
+        key: 'Mod-ArrowUp',
+        mac: 'Cmd-ArrowUp',
+        run: cursorDocStart,
+        shift: selectDocStart,
+        preventDefault: true
+      },
+      {
+        key: 'Mod-ArrowDown',
+        mac: 'Cmd-ArrowDown',
+        run: cursorDocEnd,
+        shift: selectDocEnd,
+        preventDefault: true
+      }
+    ]);
+
     const saveKeybinding = keymap.of([
       {
         key: 'Mod-s',
@@ -38,6 +93,8 @@
     const state = EditorState.create({
       doc: lastValue,
       extensions: [
+        isolateArrowEvents,
+        editorNavigationKeymap,
         liveMarkdown({ courseId }),
         history(),
         drawSelection(),

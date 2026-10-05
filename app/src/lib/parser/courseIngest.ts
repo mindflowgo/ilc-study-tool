@@ -37,6 +37,8 @@ export interface CourseManifest {
 
 export interface IngestOptions {
   overwriteExisting?: boolean;
+  overwriteLessonIds?: string[];
+  overwriteFiles?: string[];
 }
 
 export interface IngestResult {
@@ -166,9 +168,13 @@ export class CourseIngest {
       const lessonFilename = `${lessonId}.lesson.md`;
       const lessonFilePath = path.join(courseDir, lessonFilename);
       const isExistingLesson = fs.existsSync(lessonFilePath);
+      const shouldOverwrite =
+        overwriteExisting ||
+        Boolean(options.overwriteLessonIds && options.overwriteLessonIds.includes(lessonId)) ||
+        Boolean(options.overwriteFiles && options.overwriteFiles.includes(pkgFile));
 
       // If lesson already exists and overwrite is false, preserve existing files and register
-      if (isExistingLesson && !overwriteExisting) {
+      if (isExistingLesson && !shouldOverwrite) {
         let lessonTitle = extracted.title || `${isAssignment ? 'Assignment' : 'Lesson'} ${unitNumber}.${lessonNumber}`;
         try {
           const content = fs.readFileSync(lessonFilePath, 'utf8');
@@ -211,7 +217,7 @@ export class CourseIngest {
       // 2. Generate Initial Summary with YAML frontmatter
       const summaryFilename = `${lessonId}.summary.md`;
       const summaryFilePath = path.join(courseDir, summaryFilename);
-      if (!fs.existsSync(summaryFilePath) || overwriteExisting) {
+      if (!fs.existsSync(summaryFilePath) || shouldOverwrite) {
         const summaryPrompt = this.loadGenericPrompt('summary');
         const summaryBody = this.generateInitialSummary(
           courseId,
@@ -237,7 +243,7 @@ export class CourseIngest {
       // 3. Generate Initial Cheatsheet with YAML frontmatter
       const cheatsheetFilename = `${lessonId}.cheatsheet.md`;
       const cheatsheetFilePath = path.join(courseDir, cheatsheetFilename);
-      if (!fs.existsSync(cheatsheetFilePath) || overwriteExisting) {
+      if (!fs.existsSync(cheatsheetFilePath) || shouldOverwrite) {
         const cheatsheetPrompt = this.loadGenericPrompt('cheatsheet');
         const cheatsheetBody = this.generateInitialCheatsheet(
           courseId,
@@ -261,7 +267,7 @@ export class CourseIngest {
       // 4. Generate Initial KICA Test with YAML frontmatter
       const testFilename = `${lessonId}.test.md`;
       const testFilePath = path.join(courseDir, testFilename);
-      if (!fs.existsSync(testFilePath) || overwriteExisting) {
+      if (!fs.existsSync(testFilePath) || shouldOverwrite) {
         const testPrompt = this.loadGenericPrompt('test');
         const testBody = this.generateInitialTest(
           courseId,

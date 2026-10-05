@@ -41,16 +41,6 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowLeft') {
-      e.preventDefault();
-      prevLesson();
-    } else if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowRight') {
-      e.preventDefault();
-      nextLesson();
-    }
-  }
-
   function toggleDropdown() {
     isOpen = !isOpen;
     if (isOpen) searchQuery = '';
@@ -75,14 +65,12 @@
   );
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
 <div class="relative flex items-center space-x-1.5 text-xs">
   <!-- Prev Button -->
   <button
     onclick={prevLesson}
     disabled={!hasPrev}
-    title="Previous lesson (⌘+Left)"
+    title="Previous lesson"
     class="p-1.5 rounded border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 transition"
   >
     <ChevronLeft class="w-4 h-4" />
@@ -172,7 +160,7 @@
   <button
     onclick={nextLesson}
     disabled={!hasNext}
-    title="Next lesson (⌘+Right)"
+    title="Next lesson"
     class="p-1.5 rounded border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 transition"
   >
     <ChevronRight class="w-4 h-4" />

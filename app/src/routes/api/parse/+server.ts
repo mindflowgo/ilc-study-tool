@@ -13,6 +13,9 @@ export const POST: RequestHandler = async ({ request }) => {
     const formData = await request.formData();
     const courseId = (formData.get('courseId') as string)?.trim().toLowerCase() || 'new_course';
     const files = formData.getAll('files') as File[];
+    const mode = (formData.get('mode') as string) || 'add';
+    const targetLessonId = (formData.get('targetLessonId') as string)?.trim() || '';
+    const overwriteExisting = formData.get('overwriteExisting') === 'true';
 
     if (!files.length) {
       throw error(400, 'No files provided');
@@ -22,15 +25,21 @@ export const POST: RequestHandler = async ({ request }) => {
     const backupDir = path.join(courseDir, '_backup');
     fs.mkdirSync(backupDir, { recursive: true });
 
+    const uploadedFilenames: string[] = [];
     for (const file of files) {
       if (/\.(zip|mhtml|mht|html|htm)$/i.test(file.name)) {
         const buffer = Buffer.from(await file.arrayBuffer());
         fs.writeFileSync(path.join(backupDir, file.name), buffer);
+        uploadedFilenames.push(file.name);
       }
     }
 
     const ingester = new CourseIngest();
-    const manifest = await ingester.ingestCourse(courseDir);
+    const manifest = await ingester.ingestCourse(courseDir, {
+      overwriteExisting: overwriteExisting || (mode === 'replace' && !targetLessonId),
+      overwriteLessonIds: targetLessonId ? [targetLessonId] : undefined,
+      overwriteFiles: mode === 'replace' ? uploadedFilenames : undefined
+    });
 
     return json({ success: true, manifest });
   }
@@ -38,6 +47,8 @@ export const POST: RequestHandler = async ({ request }) => {
   // JSON request to re-parse existing course
   const body = await request.json().catch(() => ({}));
   const courseId = body.courseId;
+  const overwriteExisting = Boolean(body.overwriteExisting);
+  const lessonId = body.lessonId ? String(body.lessonId).trim() : undefined;
 
   const coursesDir = CourseService.getCoursesDir();
   const ingester = new CourseIngest();
@@ -47,7 +58,10 @@ export const POST: RequestHandler = async ({ request }) => {
     if (!fs.existsSync(coursePath)) {
       throw error(404, `Course ${courseId} not found`);
     }
-    const manifest = await ingester.ingestCourse(coursePath);
+    const manifest = await ingester.ingestCourse(coursePath, {
+      overwriteExisting,
+      overwriteLessonIds: lessonId ? [lessonId] : undefined
+    });
     return json({ success: true, manifest });
   } else {
     // Re-parse all

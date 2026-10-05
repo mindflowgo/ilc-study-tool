@@ -30,7 +30,8 @@
     Loader2,
     Check,
     Plus,
-    X
+    X,
+    RefreshCw
   } from 'lucide-svelte';
 
   let courseId = $derived($page.params.course_id);
@@ -39,6 +40,7 @@
   let activeTab: 'lesson' | 'summary' | 'cheatsheet' | 'test' = $state('lesson');
   let isEditing: boolean = $state(false);
   let isUploadModalOpen: boolean = $state(false);
+  let uploadModalMode: 'add' | 'replace' = $state('add');
   let isLLMModalOpen: boolean = $state(false);
   let isGeneratingAI: boolean = $state(false);
 
@@ -563,9 +565,12 @@
     }
   }
 
-  function handleChaptersUploaded(uploadedCourseId: string) {
-    loadCourse();
-    saveSuccessMessage = 'New chapters added!';
+  async function handleChaptersUploaded(uploadedCourseId: string) {
+    await loadCourse();
+    if (selectedLessonId) {
+      await loadLesson(selectedLessonId);
+    }
+    saveSuccessMessage = uploadModalMode === 'replace' ? 'Chapter replaced!' : 'New chapters added!';
     setTimeout(() => {
       saveSuccessMessage = '';
     }, 3000);
@@ -648,14 +653,25 @@
           onSelectLesson={(id) => loadLesson(id)}
         />
 
-        <button
-          onclick={() => (isUploadModalOpen = true)}
-          class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition shadow-2xs shrink-0"
-          title="Add new chapters / lessons to this course"
-        >
-          <Plus class="w-3.5 h-3.5 text-stone-500" />
-          <span class="hidden md:inline">Add Chapters</span>
-        </button>
+        <div class="flex items-center space-x-1.5 shrink-0">
+          <button
+            onclick={() => { uploadModalMode = 'add'; isUploadModalOpen = true; }}
+            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition shadow-2xs cursor-pointer"
+            title="Add new chapters / lessons to this course"
+          >
+            <Plus class="w-3.5 h-3.5 text-stone-500" />
+            <span>Add</span>
+          </button>
+
+          <button
+            onclick={() => { uploadModalMode = 'replace'; isUploadModalOpen = true; }}
+            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition shadow-2xs cursor-pointer"
+            title="Replace current chapter ({currentLessonTitle || selectedLessonId}) with a new file upload"
+          >
+            <RefreshCw class="w-3.5 h-3.5 text-stone-500" />
+            <span>Replace</span>
+          </button>
+        </div>
       </div>
 
       <!-- Middle: Study Tabs (Full | Summary | Cheatsheet | Test) -->
@@ -717,47 +733,49 @@
           />
         {/if}
 
-        <!-- Main Card with Absolute Top-Right [Edit Markdown] or [Cancel] | [Save] Controls -->
-        <div class="relative bg-white rounded-2xl border border-stone-200 shadow-2xs group overflow-hidden">
-          <!-- Top-Right Action Controls (Absolute) -->
-          <div class="absolute top-4 right-4 z-20 flex items-center space-x-2">
-            {#if isEditing}
-              <button
-                onclick={handleCancelEdit}
-                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition shadow-2xs cursor-pointer"
-                title="Discard changes and exit edit mode (Esc)"
-              >
-                <X class="w-3.5 h-3.5 text-stone-500" />
-                <span>Cancel</span>
-              </button>
+        <!-- Main Card with Sticky Top-Right [Edit] or [Cancel] | [Save] Controls -->
+        <div class="relative bg-white rounded-2xl border border-stone-200 shadow-2xs group">
+          <!-- Top-Right Action Controls (Sticky) -->
+          <div class="sticky top-3 sm:top-4 z-30 flex justify-end px-4 sm:px-6 pt-3 sm:pt-4 -mb-10 sm:-mb-12 pointer-events-none">
+            <div class="pointer-events-auto flex items-center space-x-2">
+              {#if isEditing}
+                <button
+                  onclick={handleCancelEdit}
+                  class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 transition shadow-xs hover:shadow-sm cursor-pointer"
+                  title="Discard changes and exit edit mode (Esc)"
+                >
+                  <X class="w-3.5 h-3.5 text-stone-500" />
+                  <span>Cancel</span>
+                </button>
 
-              <button
-                onclick={handleSaveEdit}
-                disabled={isSaving}
-                class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white text-xs font-medium transition shadow-2xs cursor-pointer"
-                title="Save changes to file (⌘+S)"
-              >
-                {#if isSaving}
-                  <Loader2 class="w-3.5 h-3.5 animate-spin" />
-                  <span>Saving...</span>
-                {:else if saveSuccessMessage}
-                  <Check class="w-3.5 h-3.5 text-emerald-400" />
-                  <span class="text-emerald-400 font-semibold">{saveSuccessMessage}</span>
-                {:else}
-                  <Save class="w-3.5 h-3.5" />
-                  <span>Save</span>
-                {/if}
-              </button>
-            {:else}
-              <button
-                onclick={() => (isEditing = true)}
-                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200 bg-white/95 hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-2xs hover:shadow-xs transition cursor-pointer"
-                title="Edit Markdown source"
-              >
-                <Edit3 class="w-3.5 h-3.5 text-stone-500" />
-                <span>Edit Markdown</span>
-              </button>
-            {/if}
+                <button
+                  onclick={handleSaveEdit}
+                  disabled={isSaving}
+                  class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900/95 backdrop-blur-sm hover:bg-stone-800 disabled:opacity-50 text-white text-xs font-medium transition shadow-xs hover:shadow-sm cursor-pointer"
+                  title="Save changes to file (⌘+S)"
+                >
+                  {#if isSaving}
+                    <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  {:else if saveSuccessMessage}
+                    <Check class="w-3.5 h-3.5 text-emerald-400" />
+                    <span class="text-emerald-400 font-semibold">{saveSuccessMessage}</span>
+                  {:else}
+                    <Save class="w-3.5 h-3.5" />
+                    <span>Save</span>
+                  {/if}
+                </button>
+              {:else}
+                <button
+                  onclick={() => (isEditing = true)}
+                  class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer"
+                  title="Edit content"
+                >
+                  <Edit3 class="w-3.5 h-3.5 text-stone-500" />
+                  <span>Edit</span>
+                </button>
+              {/if}
+            </div>
           </div>
 
           {#if isEditing}
@@ -815,6 +833,9 @@
   <UploadModal
     isOpen={isUploadModalOpen}
     presetCourseId={course.id}
+    mode={uploadModalMode}
+    targetLessonId={selectedLessonId}
+    targetLessonTitle={currentLessonTitle}
     onClose={() => (isUploadModalOpen = false)}
     onUploaded={handleChaptersUploaded}
   />

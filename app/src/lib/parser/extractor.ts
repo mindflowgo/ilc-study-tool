@@ -66,10 +66,14 @@ export class ArchiveExtractor {
     fs.mkdirSync(path.join(assetsOutputDir, 'icons'), { recursive: true });
     fs.mkdirSync(path.join(assetsOutputDir, 'locker_docs'), { recursive: true });
 
-    let intermediateHtml = '';
-    let lessonsHtml = '';
-    let fallbackHtml = '';
-    let htmlPathInZip = '';
+    const cleanZipName = zipBasename
+      .replace(/\.(html\.zip|zip|mhtml|mht|html|htm)$/i, '')
+      .toLowerCase();
+    const isZipAssignment = /assign/i.test(zipBasename);
+    const ulaMatch = zipBasename.match(/u(\d+)la(\d+)/i);
+    const targetCode = ulaMatch ? `u${ulaMatch[1]}la${ulaMatch[2]}`.toLowerCase() : null;
+
+    let bestHtmlEntry: { entryName: string; text: string; score: number } | null = null;
 
     for (const entry of zipEntries) {
       if (entry.isDirectory) continue;
@@ -101,34 +105,86 @@ export class ArchiveExtractor {
 
       // Check for HTML lesson candidates
       if (ext === '.html' || ext === '.htm') {
+        const lowerName = entryName.toLowerCase();
+        const lowerFilename = filename.toLowerCase();
+        const entryStem = path.basename(lowerFilename, ext);
         const text = entry.getData().toString('utf8');
-        // Priority 1: intermediate.html (browser-saved SCORM iframe containing actual lesson content)
-        if (entryName.includes('intermediate.html')) {
-          intermediateHtml = text;
-          htmlPathInZip = entryName;
+
+        let score = 0;
+
+        // 1. Direct stem match (e.g. entry "gwl3o_u1la1.html" matches package "gwl3o_u1la1.html.zip")
+        if (entryStem === cleanZipName) {
+          score += 1000;
         }
-        // Priority 2: lessons/ or assignments/ folder
-        else if (entryName.includes('lessons/') || entryName.includes('assignments/')) {
-          lessonsHtml = text;
-          htmlPathInZip = entryName;
-        }
-        // Priority 3: HTML with ILC-specific content markers
-        else if (text.includes('ilcLearningGoals') || text.includes('mindsOn')) {
-          if (!lessonsHtml) {
-            lessonsHtml = text;
-            htmlPathInZip = entryName;
+
+        // 2. Unit/Lesson code match (e.g. "u1la1")
+        if (targetCode) {
+          if (entryStem.includes(targetCode) || lowerName.includes(targetCode)) {
+            score += 500;
+          } else if (/u\d+la\d+/i.test(lowerName)) {
+            // Belongs to a completely different lesson code (e.g. u4la5 in a u1la1 package)
+            score -= 800;
           }
         }
-        // Fallback: any outer HTML file (skip alternative transcripts if possible)
-        else if (!fallbackHtml && !entryName.includes('/alt/')) {
-          fallbackHtml = text;
-          if (!htmlPathInZip) htmlPathInZip = entryName;
+
+        // 3. Assignment vs Lesson folder preference
+        if (isZipAssignment) {
+          if (lowerName.includes('/assignments/') || lowerName.startsWith('assignments/')) {
+            score += 400;
+          }
+          if (entryStem.includes('assign')) {
+            score += 200;
+          }
+          if (lowerName.includes('/lessons/') || lowerName.startsWith('lessons/')) {
+            score -= 200;
+          }
+        } else {
+          // Regular lesson package: strongly prefer lessons/ folder over assignments/
+          if (lowerName.includes('/lessons/') || lowerName.startsWith('lessons/')) {
+            score += 400;
+          }
+          if (lowerName.includes('/assignments/') || lowerName.startsWith('assignments/')) {
+            score -= 600;
+          }
+          if (entryStem.includes('assign')) {
+            score -= 400;
+          }
+        }
+
+        // 4. intermediate.html (Brightspace/SCORM embedded lesson content)
+        if (entryStem === 'intermediate' || lowerName.includes('intermediate.html')) {
+          score += 1500;
+        }
+
+        // 5. Penalize ancillary/sub-asset folders
+        if (
+          lowerName.includes('/locker_docs/') ||
+          lowerName.includes('/alt/') ||
+          lowerName.includes('/assets/') ||
+          lowerName.includes('/dependencies/') ||
+          lowerName.includes('/vendor/')
+        ) {
+          score -= 1000;
+        }
+
+        // 6. Content markers
+        if (text.includes('ilcLearningGoals') || text.includes('mindsOn')) {
+          score += 150;
+        }
+        if (text.includes('<section id="ilc_')) {
+          score += 100;
+        }
+
+        if (!bestHtmlEntry || score > bestHtmlEntry.score) {
+          bestHtmlEntry = { entryName, text, score };
         }
       }
     }
 
-    const htmlContent = intermediateHtml || lessonsHtml || fallbackHtml;
-    if (!htmlContent) return null;
+    if (!bestHtmlEntry) return null;
+
+    const htmlContent = bestHtmlEntry.text;
+    const htmlPathInZip = bestHtmlEntry.entryName;
 
     const meta = this.parseLessonMetadata(zipBasename, htmlContent);
 
@@ -371,7 +427,7 @@ export class ArchiveExtractor {
     }
 
     // 4. Check HTML content for activityCode or unit/lesson if not resolved
-    if (htmlContent) {
+    if (!activityCode && htmlContent) {
       const codeMatch = htmlContent.match(
         /(?:lessons|assignments)\/([a-zA-Z0-9_]+_u(\d+)la(\d+))/i
       );
