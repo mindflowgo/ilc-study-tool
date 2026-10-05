@@ -16,7 +16,7 @@
   let baseUrl = $state('http://localhost:11434/v1');
   let apiKey = $state('');
   let authHeaderType: 'bearer' | 'api_key' | 'both' = $state('bearer');
-  let model = $state('llama3');
+  let model = $state('');
   let temperature = $state(0.3);
 
   let isTestingConnection = $state(false);
@@ -32,24 +32,42 @@
       baseUrl = localStorage.getItem('ilc_llm_baseUrl') || 'http://localhost:11434/v1';
       apiKey = localStorage.getItem('ilc_llm_apiKey') || '';
       authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
-      model = localStorage.getItem('ilc_llm_model') || 'llama3';
+      model = localStorage.getItem('ilc_llm_model') ?? '';
       temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
     }
   }
 
   function saveSettings() {
+    const cleanModel = model.trim();
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('ilc_llm_provider', provider);
       localStorage.setItem('ilc_llm_baseUrl', baseUrl);
       localStorage.setItem('ilc_llm_apiKey', apiKey);
       localStorage.setItem('ilc_llm_authHeaderType', authHeaderType);
-      localStorage.setItem('ilc_llm_model', model);
+      localStorage.setItem('ilc_llm_model', cleanModel);
       localStorage.setItem('ilc_llm_temp', temperature.toString());
-      saveMessage = 'Settings saved to browser storage.';
+      saveMessage = 'Settings saved.';
       setTimeout(() => {
         saveMessage = '';
       }, 2500);
     }
+
+    // Sync to server immediately so background queue worker uses CURRENT active settings
+    fetch('/api/llm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'save_config',
+        config: {
+          provider,
+          baseUrl,
+          apiKey,
+          authHeaderType,
+          model: cleanModel,
+          temperature
+        }
+      })
+    }).catch((err) => console.warn('Failed to sync LLM config to server:', err));
   }
 
   async function testConnection() {

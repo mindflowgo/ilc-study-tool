@@ -80,6 +80,10 @@ export class CourseService {
     }
   }
 
+  static getManifest(courseId: string): CourseManifest | null {
+    return this.getCourse(courseId);
+  }
+
   static getLessonContent(courseId: string, lessonId: string): LessonContentBundle | null {
     const courseDir = path.join(this.getCoursesDir(), courseId.toLowerCase());
     if (!fs.existsSync(courseDir)) return null;
@@ -126,6 +130,10 @@ export class CourseService {
       cheatsheets,
       tests
     };
+  }
+
+  static getLessonBundle(courseId: string, lessonId: string): LessonContentBundle | null {
+    return this.getLessonContent(courseId, lessonId);
   }
 
   static saveLessonTab(

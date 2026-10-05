@@ -1,8 +1,8 @@
 [package]
 name = "ilc-study-tool"
 version = "0.1.0"
-description = "TVO ILC Study Tool"
-authors = ["TVO ILC Team"]
+description = "Study Tool"
+authors = ["Study Team"]
 edition = "2021"
 
 [lib]

@@ -1,14 +1,16 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { BookOpen, Sparkles, Settings, GraduationCap, ChevronRight } from 'lucide-svelte';
+  import AIQueuePopover from './AIQueuePopover.svelte';
 
   interface Props {
     courseId?: string;
     courseTitle?: string;
     lessonTitle?: string;
+    onLessonUpdated?: (lessonId: string, tab: string) => void;
   }
 
-  let { courseId = '', courseTitle = '', lessonTitle = '' }: Props = $props();
+  let { courseId = '', courseTitle = '', lessonTitle = '', onLessonUpdated }: Props = $props();
 
   let activePath = $derived($page.url.pathname);
 </script>
@@ -20,7 +22,7 @@
       <div class="w-8 h-8 rounded-lg bg-stone-900 text-white flex items-center justify-center shadow-sm">
         <GraduationCap class="w-4 h-4" />
       </div>
-      <span class="font-semibold tracking-tight text-base hidden sm:inline">ILC Study Tool</span>
+      <span class="font-semibold tracking-tight text-base hidden sm:inline">Study Tool</span>
     </a>
 
     {#if courseId}
@@ -39,8 +41,10 @@
     {/if}
   </div>
 
-  <!-- Right: Top-Level Navigation -->
-  <nav class="flex items-center space-x-1 shrink-0">
+  <!-- Right: Top-Level Navigation & Background AI Queue -->
+  <nav class="flex items-center space-x-1.5 shrink-0">
+    <AIQueuePopover {courseId} {onLessonUpdated} />
+
     <a
       href="/"
       class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition {activePath === '/' || activePath.startsWith('/courses') ? 'bg-stone-100 text-stone-900' : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'}"

@@ -316,108 +316,116 @@
     tabContents[activeTab] = serializeWithFrontmatter(currentParsed.frontmatter, newBody);
   }
 
+  function getLocalLLMConfig() {
+    if (typeof localStorage === 'undefined') return undefined;
+    const baseUrl = localStorage.getItem('ilc_llm_baseUrl');
+    if (!baseUrl) return undefined;
+    return {
+      provider: localStorage.getItem('ilc_llm_provider') || 'openai_compatible',
+      baseUrl,
+      apiKey: localStorage.getItem('ilc_llm_apiKey') || '',
+      authHeaderType: (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer',
+      model: (localStorage.getItem('ilc_llm_model') ?? '').trim(),
+      temperature: parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3')
+    };
+  }
+
   async function triggerAIGeneration(asNewVersion: boolean = false) {
-    let provider = '';
-    let baseUrl = '';
-    let model = '';
-    let apiKey = '';
-    let authHeaderType: 'bearer' | 'api_key' | 'both' = 'bearer';
-    let temperature = 0.3;
+    if (activeTab === 'lesson') return;
 
-    if (typeof localStorage !== 'undefined') {
-      provider = localStorage.getItem('ilc_llm_provider') || '';
-      baseUrl = localStorage.getItem('ilc_llm_baseUrl') || '';
-      model = localStorage.getItem('ilc_llm_model') || '';
-      apiKey = localStorage.getItem('ilc_llm_apiKey') || '';
-      authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
-      temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
-    }
-
-    if (!baseUrl) {
+    const localConfig = getLocalLLMConfig();
+    if (!localConfig?.baseUrl) {
       isLLMModalOpen = true;
       return;
     }
 
-    isGeneratingAI = true;
-
     try {
-      const fullLessonContent = tabContents.lesson || '';
-      const userPrompt = `Course: ${course?.title || courseId}\nLesson: ${currentLessonTitle}\n\nFull Lesson Material:\n${fullLessonContent}`;
-      const sessionId = `${courseId}-${activeTab}`;
       const activeSystemPrompt = parsedActiveTab.frontmatter.prompt || defaultPromptForActiveTab;
 
-      console.log(`[ILC AI Request: ${tabDisplayName}]`);
-      console.log(`- Session ID: ${sessionId}`);
-      console.log(`- System Prompt: "${activeSystemPrompt.slice(0, 150)}..."`);
-      console.log(`- User Prompt Length: ${userPrompt.length.toLocaleString()} characters (~${Math.round(userPrompt.length / 4).toLocaleString()} tokens)`);
-      console.log(`- User Prompt Start:\n"${userPrompt.slice(0, 200)}..."`);
+      console.log(`\n[ILC AI Enqueue: ${tabDisplayName}]`);
+      console.log(`- Course: ${(courseId || '').toUpperCase()} | Lesson: ${selectedLessonId} (${currentLessonTitle})`);
+      console.log(`- Endpoint: ${localConfig.baseUrl}`);
+      console.log(`- Model: ${localConfig.model || '(server default)'}`);
+      console.log(`- Mode: ${asNewVersion ? 'Save as new version' : 'Overwrite current'}`);
+      console.log(`- System Prompt: "${activeSystemPrompt.slice(0, 120)}..."`);
 
-      const res = await fetch('/api/llm', {
+      const res = await fetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'generate',
-          config: {
-            provider,
-            baseUrl,
-            apiKey,
-            authHeaderType,
-            model,
-            temperature,
-            sessionId
-          },
-          sessionId,
-          systemPrompt: activeSystemPrompt,
-          userPrompt
+          action: 'enqueue',
+          courseId,
+          lessonId: selectedLessonId,
+          lessonTitle: currentLessonTitle,
+          tab: activeTab,
+          asNewVersion,
+          customPrompt: activeSystemPrompt,
+          customConfig: localConfig
         })
       });
 
       if (!res.ok) {
         const errText = await res.text();
-        console.error(`[ILC AI Error] Status: ${res.status}`, errText);
-        throw new Error(errText || 'Generation request failed');
+        console.error(`[ILC AI Enqueue Error]`, errText);
+        throw new Error(errText || 'Failed to queue generation task');
       }
 
-      const data = await res.json();
-      const newGeneratedContent = data.completion;
-      const usageInfo = data.usage?.total_tokens !== undefined ? ` | "total_tokens":${data.usage.total_tokens}` : '';
-      console.log(`[ILC AI Received] ${newGeneratedContent.length.toLocaleString()} characters for ${tabDisplayName}${usageInfo}`);
+      console.log(`[ILC AI Enqueue Success] ${tabDisplayName} task added to background queue.`);
 
-      // Prepare target version frontmatter
-      const nextVer = (currentTabVersions.length > 0 ? Math.max(...currentTabVersions.map((v) => v.versionNumber)) : 0) + 1;
-      const frontmatterToSave = {
-        ...parsedActiveTab.frontmatter,
-        prompt: parsedActiveTab.frontmatter.prompt || defaultPromptForActiveTab,
-        type: activeTab,
-        version: asNewVersion ? nextVer : (parsedActiveTab.frontmatter.version || 1),
-        updatedAt: new Date().toISOString().split('T')[0]
-      };
+      saveSuccessMessage = asNewVersion
+        ? `✨ Queued new version of ${tabDisplayName}!`
+        : `✨ Queued ${tabDisplayName} for generation!`;
 
-      const finalMarkdown = serializeWithFrontmatter(frontmatterToSave, newGeneratedContent);
-      const targetTab = asNewVersion ? activeTab : (activeTab === 'lesson' ? 'lesson' : activeVersions[activeTab]);
+      setTimeout(() => {
+        saveSuccessMessage = '';
+      }, 3500);
+    } catch (err: any) {
+      alert('AI Generation Queue Error: ' + (err?.message || 'Check your LLM configuration.'));
+    }
+  }
 
-      const saveRes = await fetch(`/api/courses/${courseId}/${selectedLessonId}`, {
-        method: 'PUT',
+  let isQueueingMissing: boolean = $state(false);
+
+  async function queueAllMissing() {
+    if (!courseId) return;
+    const localConfig = getLocalLLMConfig();
+    if (!localConfig?.baseUrl) {
+      isLLMModalOpen = true;
+      return;
+    }
+
+    isQueueingMissing = true;
+    try {
+      const res = await fetch('/api/queue', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          tab: targetTab,
-          content: finalMarkdown,
-          asNewVersion
+          action: 'enqueue',
+          courseId,
+          tabs: ['summary', 'cheatsheet', 'test'],
+          customConfig: localConfig
         })
       });
 
-      if (saveRes.ok) {
-        const saveResult = await saveRes.json();
-        await loadLesson(selectedLessonId, { tab: activeTab as any, versionId: saveResult.versionId });
-        saveSuccessMessage = asNewVersion ? `✨ Generated as v${nextVer}!` : '✨ Re-generated with AI!';
+      if (res.ok) {
+        const data = await res.json();
+        const count = data.enqueued?.length || 0;
+        if (count > 0) {
+          saveSuccessMessage = `✨ Queued ${count} missing item${count === 1 ? '' : 's'} for generation!`;
+        } else {
+          saveSuccessMessage = `All study items are already generated!`;
+        }
         setTimeout(() => {
           saveSuccessMessage = '';
-        }, 3000);
+        }, 4000);
+      } else {
+        const errText = await res.text();
+        throw new Error(errText || 'Failed to queue missing items');
       }
     } catch (err: any) {
-      alert('AI Generation Error: ' + (err?.message || 'Check your LLM configuration.'));
+      alert('Failed to queue missing items: ' + (err?.message || 'Check connection'));
     } finally {
-      isGeneratingAI = false;
+      isQueueingMissing = false;
     }
   }
 
@@ -630,6 +638,11 @@
   courseId={course?.id}
   courseTitle={course?.title}
   lessonTitle={currentLessonTitle}
+  onLessonUpdated={(lId) => {
+    if (lId === selectedLessonId) {
+      loadLesson(selectedLessonId);
+    }
+  }}
 />
 
 {#if isLoadingCourse}
@@ -670,6 +683,21 @@
           >
             <RefreshCw class="w-3.5 h-3.5 text-stone-500" />
             <span>Replace</span>
+          </button>
+
+          <button
+            onclick={queueAllMissing}
+            disabled={isQueueingMissing}
+            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-xs font-medium text-amber-900 transition shadow-2xs cursor-pointer disabled:opacity-50"
+            title="Scan course and queue all ungenerated study sheets (Summary, Cheatsheet, Test) in background"
+          >
+            {#if isQueueingMissing}
+              <Loader2 class="w-3.5 h-3.5 text-amber-600 animate-spin" />
+              <span>Queueing...</span>
+            {:else}
+              <Sparkles class="w-3.5 h-3.5 text-amber-600" />
+              <span>Generate Missing</span>
+            {/if}
           </button>
         </div>
       </div>
@@ -736,7 +764,7 @@
         <!-- Main Card with Sticky Top-Right [Edit] or [Cancel] | [Save] Controls -->
         <div class="relative bg-white rounded-2xl border border-stone-200 shadow-2xs group">
           <!-- Top-Right Action Controls (Sticky) -->
-          <div class="sticky top-3 sm:top-4 z-30 flex justify-end px-4 sm:px-6 pt-3 sm:pt-4 -mb-10 sm:-mb-12 pointer-events-none">
+          <div class="sticky top-1 sm:top-2 z-30 flex justify-end px-4 sm:px-6 pt-3 sm:pt-4 -mb-10 sm:-mb-12 pointer-events-none">
             <div class="pointer-events-auto flex items-center space-x-2">
               {#if isEditing}
                 <button

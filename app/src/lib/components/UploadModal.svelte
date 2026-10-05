@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Upload, X, FileArchive, CheckCircle2, AlertCircle, Loader2, Plus, RefreshCw } from 'lucide-svelte';
+  import { Upload, X, FileArchive, CheckCircle2, AlertCircle, Loader2, Plus, RefreshCw, Sparkles } from 'lucide-svelte';
 
   interface Props {
     isOpen: boolean;
@@ -25,6 +25,7 @@
   let selectedFiles: File[] = $state([]);
   let isDragging = $state(false);
   let isUploading = $state(false);
+  let autoGenerateAI = $state(true);
   let errorMessage = $state('');
 
   $effect(() => {
@@ -46,6 +47,20 @@
     if (e.dataTransfer?.files) {
       selectedFiles = Array.from(e.dataTransfer.files).filter((f) => /\.(zip|mhtml|mht|html|htm)$/i.test(f.name));
     }
+  }
+
+  function getLocalLLMConfig() {
+    if (typeof localStorage === 'undefined') return undefined;
+    const baseUrl = localStorage.getItem('ilc_llm_baseUrl');
+    if (!baseUrl) return undefined;
+    return {
+      provider: localStorage.getItem('ilc_llm_provider') || 'openai_compatible',
+      baseUrl,
+      apiKey: localStorage.getItem('ilc_llm_apiKey') || '',
+      authHeaderType: (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer',
+      model: (localStorage.getItem('ilc_llm_model') ?? '').trim(),
+      temperature: parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3')
+    };
   }
 
   async function uploadFiles() {
@@ -82,6 +97,27 @@
 
       const data = await res.json();
       selectedFiles = [];
+
+      if (autoGenerateAI) {
+        try {
+          const localConfig = getLocalLLMConfig();
+          await fetch('/api/queue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'enqueue',
+              courseId: finalCourseId,
+              lessonId: mode === 'replace' ? targetLessonId : undefined,
+              lessonTitle: mode === 'replace' ? targetLessonTitle : undefined,
+              tabs: ['summary', 'cheatsheet', 'test'],
+              customConfig: localConfig
+            })
+          });
+        } catch (queueErr) {
+          console.warn('Auto-queue study materials failed:', queueErr);
+        }
+      }
+
       onUploaded(finalCourseId);
       onClose();
     } catch (err: any) {
@@ -199,6 +235,22 @@
           {/each}
         </div>
       {/if}
+
+      <!-- Auto-generate AI Study Materials Toggle -->
+      <div class="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/50">
+        <label class="flex items-center space-x-2 text-xs text-stone-800 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            bind:checked={autoGenerateAI}
+            class="rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+          />
+          <div class="flex items-center space-x-1.5 flex-1 min-w-0">
+            <Sparkles class="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span class="font-medium text-stone-900">Auto-queue AI Study Materials</span>
+            <span class="text-[10px] text-stone-500 hidden sm:inline">(Summary, Cheatsheet, Test)</span>
+          </div>
+        </label>
+      </div>
 
       <!-- Error message -->
       {#if errorMessage}

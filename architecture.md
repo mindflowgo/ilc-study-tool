@@ -1,8 +1,8 @@
-# Architecture Specification: TVO ILC Study Tool (Desktop & Web)
+# Architecture Specification: Course Study Tool (Desktop & Web)
 
 ## 1. Executive Summary & Vision
 
-The **TVO ILC Study Tool** is a high-performance, distraction-free study desktop and web platform that parses Independent Learning Centre (ILC) course packages into clean, structured Markdown, organizes them by unit and lesson, generates high-yield AI summaries and study notes, and provides interactive Ontario Curriculum (KICA)-aligned test materials.
+The **Course Study Tool** is a high-performance, distraction-free study desktop and web platform that parses Independent Learning Centre (ILC) course packages into clean, structured Markdown, organizes them by unit and lesson, generates high-yield AI summaries and study notes, and provides interactive Ontario Curriculum (KICA)-aligned test materials.
 
 All content is stored in a transparent, flat Markdown filesystem with zero external database dependencies. Inline editing is powered by the **CodeMirror 6** Markdown editor, allowing students to refine their notes and tests directly.
 
@@ -15,7 +15,7 @@ All content is stored in a transparent, flat Markdown filesystem with zero exter
    - **Study Tabs**:
      - **Full Lesson**: The parsed lesson content rendered with clean typography, GFM callout boxes (`[!NOTE]`, `[!TIP]`, `[!IMPORTANT]`), expandable suggested answers, and diagrams.
      - **Summary**: High-yield AI summary synthesizing core principles, legal definitions, and Ontario expectations.
-     - **Cheatsheet**: Quick-reference table of key terms, statutory provisions, landmark cases, and rules vs. laws comparisons.
+     - **Cheatsheet**: Quick-reference table of key terms, etc.
      - **Practice Test**: Interactive quiz runner for Ontario KICA-aligned questions (Knowledge & Understanding, Thinking & Investigation, Communication, Application) with instant scoring, feedback, and rationale reveals.
    - **Inline CodeMirror Editor**: Toggle between rich reading view and live Markdown editing with instant auto-save to disk.
    - **Incremental Chapter Additions**: An `[+] Add Chapters` button in the workspace subheader allows uploading new lesson `.zip` archives directly to the active course. Existing customized notes and edits are strictly preserved while new chapters are parsed and indexed.
@@ -23,7 +23,7 @@ All content is stored in a transparent, flat Markdown filesystem with zero exter
    - Customizable prompt templates for generating lesson summaries, cheatsheets, and KICA tests with dynamic placeholders (`{{lesson_title}}`, `{{content}}`, `{{unit}}`).
 4. **Settings (`/settings`)**:
    - Data storage path configuration (default: `data/courses`).
-   - LLM endpoint configuration (OpenAI-compatible, Ollama, Gemini, OpenRouter) with connection testing and selectable authentication header format (`Authorization: Bearer {key}`, `api-key: {key}`, or both).
+   - LLM endpoint configuration (OpenAI-compatible, Ollama, Gemini, OpenRouter) with connection testing.
    - Manual re-index and re-parse triggers.
 
 ---
@@ -44,7 +44,7 @@ ilc-study-tool/
 ├── package.json                # Root Bun package script coordinator
 ├── data/
 │   ├── courses/
-│   │   └── <course_id>/        # e.g., clu3m
+│   │   └── <course_id>/        # e.g., cou2m
 │   │       ├── _backup/        # Original course HTML/ZIP archives
 │   │       ├── meta.json       # Course metadata & units/lessons index
 │   │       ├── assets/         # Extracted diagrams, images, and locker documents
@@ -85,20 +85,20 @@ ilc-study-tool/
 ### 3.1 Course Manifest (`meta.json`)
 ```json
 {
-  "id": "clu3m",
-  "title": "CLU3M: Understanding Canadian Law",
-  "grade": "Grade 11",
+  "id": "cou2m",
+  "title": "COU2M: Course Title",
+  "grade": "Grade 10",
   "level": "University/College Preparation",
-  "description": "Explores Canadian law, constitutional rights, human rights, and the criminal justice system.",
+  "description": "Explores the content of this course.",
   "units": [
     {
       "number": 1,
-      "title": "Heritage & Legal Foundations",
+      "title": "Unit 1 Course Content",
       "lessons": [
         {
           "id": "01.02",
-          "code": "clu3m_u1la2",
-          "title": "1.2 Differentiating laws from rules",
+          "code": "cou2m_u1la2",
+          "title": "1.2 Insights into Content",
           "type": "lesson",
           "hasFull": true,
           "hasSummary": true,
@@ -115,25 +115,25 @@ ilc-study-tool/
 Carries YAML frontmatter for provenance and metadata:
 ```markdown
 ---
-title: "Learning activity 1.2: Differentiating laws from rules"
-activityCode: "clu3m_u1la2"
-courseId: "clu3m"
-unit: "Heritage"
+title: "Learning activity 1.2"
+activityCode: "cou2m_u1la2"
+courseId: "cou2m"
+unit: "Unit"
 unitNumber: 1
 lessonNumber: 2
 sourceUrl: ""
-savedAt: "2026-09-30"
+savedAt: "2025-09-30"
 ---
 
 > [!NOTE] Learning Goals
-> - Appreciate the fundamental principles of justice
-> - Explain what the concept "Rule of Law" means
-> - Explain what factors influence the law
+> - Appreciate the fundamental principles of course
+> - Explain what the concept "XYZ" means
+> - Explain what factors influence the rule
 
 ## Minds On
 
 > [!TIP] **Think**
-> What's the difference between a rule and a law?
+> What's the difference between a X and Y?
 
 ...
 ```
@@ -141,21 +141,21 @@ savedAt: "2026-09-30"
 ### 3.3 Standardized Question Schema (`<unit>.<lesson>.test.md`)
 Interactive practice tests follow human-readable Markdown with Ontario Secondary Curriculum (KICA) taxonomy:
 ```markdown
-course: CLU3M.01.02
+course: COU2M.01.02
 
-# Lesson 02: Differentiating Laws from Rules
+# Lesson 02: Differentiating X from Y
 
 ## Questions
-01) [Knowledge & Understanding] What is the fundamental difference between a rule and a law in Canadian society?
+01) [Knowledge & Understanding] What is the fundamental difference between X and Y?
 <Multiple-Choice>
-- [ ] Rules are enforced by the courts; laws are enforced by private institutions.
-- [ ] Laws apply to all members of society and are enforced by the government and courts; rules apply only to participants in specific groups or activities.
-- [ ] Rules cannot be changed; laws change annually.
-- [ ] Laws only apply to criminal matters; rules govern civil disputes.
+- [ ] Statement 1.
+- [ ] Statement 2.
+- [ ] Statement 3.
+- [ ] Statement 4.
 
 --
 
-02) [Thinking & Investigation] Which factor most significantly accounts for why Canadian copyright laws evolved following the proliferation of the internet?
+02) [Thinking & Investigation] Going deeper into concepts of ZZZ?
 <Multiple-Choice>
 - [ ] Government mandates to increase tax revenue.
 - [ ] Society's technological adoption changed public perceptions and behaviors regarding intellectual property.
@@ -165,8 +165,8 @@ course: CLU3M.01.02
 --
 
 ## Answers
-01) B - (explanation) Laws are created by governments and apply to all members of a society, enforced by state apparatus (police, courts). Rules are created by private organizations or groups and only apply to individuals who participate in them.
-02) B - (explanation) Laws evolve as society evolves; technological transformation shifts societal norms and economic realities, necessitating updated statutory frameworks.
+01) B - (explanation) 
+02) B - (explanation) 
 ```
 
 ### 3.4 Study Material YAML Frontmatter & Multi-Versioning Schema
@@ -179,10 +179,10 @@ prompt: |
   You are an expert Ontario Secondary School educator...
 type: summary
 version: 1
-updatedAt: '2026-10-03'
+updatedAt: '2025-10-03'
 ---
 
-# Study Summary: Learning activity 1.2: Differentiating laws from rules
+# Study Summary: Learning activity 1.2
 ...
 ```
 
@@ -269,9 +269,9 @@ Students reading any course material (Full Lesson, Summary, Cheatsheet) can high
 3. **Markdown Callout Storage**:
    - The answer is inserted after the annotated paragraph as a standard GFM callout:
      ```markdown
-     > [!USERNOTE] Why is this principle significant in Ontario law?
+     > [!USERNOTE] Why is this principle significant in XY?
      > <!-- target: "statutory discretion must be exercised in good faith" -->
-     > **Roncarelli v. Duplessis** established that statutory discretion cannot be arbitrary...
+     > **Concept XYZ** deeper explanation here...
      ```
    - Standard GFM callout syntax guarantees 100% interoperability with external Markdown editors and the built-in CodeMirror editor.
 4. **Interactive Reader View & Bidirectional Highlighting**:
@@ -306,21 +306,21 @@ When students click links to curriculum PDF worksheets, reference documents (e.g
 To support courses where lessons cannot be directly downloaded as standard SCORM packages, the ingestion engine seamlessly accepts browser-saved formats:
 
 ### 10.1 Supported File Types
-1. **Standard ILC Zip Packages**:
-   - `clu3m_u1la2.html.zip` (original course package format).
+1. **Standard Zip Packages**:
+   - `cou2m_u1la2.html.zip` (original course package format).
 2. **Browser-Saved "Webpage, Complete" Zip Archives**:
-   - `<Title>.html` or `<Title>.htm` paired with `<Title>_files/` directory zipped together (e.g. `Learning activity 1.1 Introduction to accounting.zip`).
+   - `<Title>.html` or `<Title>.htm` paired with `<Title>_files/` directory zipped together (e.g. `Learning activity 1.1 Introduction to XYZ.zip`).
    - Automatically detects and parses inner `intermediate.html` SCORM iframes.
    - Extracts all local images, SVGs, and PDFs from `_files/` into standardized `assets/img/`, `assets/icons/`, and `assets/locker_docs/`.
 3. **Single File Web Archives (.mhtml / .mht)**:
-   - MIME multipart documents saved directly via Chrome, Edge, or Safari (e.g. `Learning activity 1.2_ Types of business organizations.mhtml`).
+   - MIME multipart documents saved directly via Chrome, Edge, or Safari (e.g. `Learning activity 1.2_ Types of widgets.mhtml`).
    - Parses multipart boundaries, quoted-printable text, and base64-encoded binary attachments.
    - Extracts embedded diagrams and illustrations directly to disk and normalizes image `src` references.
 4. **Standalone HTML Files & Companion Folders**:
    - `.html` files placed alongside companion `_files` directories.
 
 ### 10.2 Robust Unit & Lesson Metadata Resolution
-- Resolves unit numbers, lesson numbers, activity codes, and titles across divergent naming conventions (`u1la1`, `Learning activity 1.1`, `1.2 Types of business organizations`, or internal SCORM manifests).
+- Resolves unit numbers, lesson numbers, activity codes, and titles across divergent naming conventions (`u1la1`, `Learning activity 1.1`, `1.2 Types of widgets`, or internal SCORM manifests).
 - Automatically converts root-level package files in `data/courses/<course_id>/` into `_backup/` for clean revision history and persistence.
 
 ---
@@ -361,7 +361,7 @@ Lesson content imported from brightspace or web downloads often contains oversiz
 
 ## 12. CodeMirror Live Preview (Obsidian-Style WYSIWYG Editor)
 
-Adapted from the architecture in [`nuza`](file:///Users/fil/Code/misc/nuza), the CodeMirror editor (`app/src/lib/editor`) provides an **Obsidian-style Live Preview** writing experience directly in the study tool:
+Adapted from the architecture in `nuza`, the CodeMirror editor (`app/src/lib/editor`) provides an **Obsidian-style Live Preview** writing experience directly in the study tool:
 
 ### 12.1 Interactive In-Place Markdown Rendering
 1. **Headings (`#`, `##`, `###`)**:

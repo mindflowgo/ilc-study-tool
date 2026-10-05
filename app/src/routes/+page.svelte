@@ -107,24 +107,12 @@
           class="group relative rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs hover:shadow-md hover:border-stone-300 transition flex flex-col justify-between"
         >
           <div class="space-y-3">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
-                {course.id}
-              </span>
-              <span class="text-[11px] text-stone-400 font-medium">
-                {course.grade || 'ILC'}
-              </span>
-            </div>
-
             <div>
               <h2 class="text-base font-semibold text-stone-900 group-hover:text-stone-700 transition">
-                {course.title}
+                <span class="text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
+                {course.id}
+              </span> {course.title}
               </h2>
-              {#if course.description}
-                <p class="text-xs text-stone-500 mt-1 line-clamp-2 leading-relaxed">
-                  {course.description}
-                </p>
-              {/if}
             </div>
 
             <!-- Stats & Pills -->
@@ -137,13 +125,24 @@
                 <FileText class="w-3 h-3 text-stone-400" />
                 <span>{totalLessons} Lessons</span>
               </div>
+            <ArrowRight class="w-4 h-4 transform group-hover:translate-x-1 transition" />
             </div>
           </div>
 
           <!-- Bottom Footer -->
-          <div class="mt-6 pt-4 border-t border-stone-100 flex items-center justify-between text-xs font-medium text-stone-700 group-hover:text-stone-900">
-            <span>Study Course</span>
-            <ArrowRight class="w-4 h-4 transform group-hover:translate-x-1 transition" />
+          <div class="mt-1 pt-2 border-t border-stone-100">
+            <div class="text-xs text-stone-400 mt-0.5">Download Course PDFs</div>
+
+            <div class="flex items-center justify-between text-xs font-medium text-stone-700 group-hover:text-stone-900">
+              <span class="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
+                Notes</span> 
+              <span class="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
+                Summary</span> 
+              <span class="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
+                Cheatsheet</span>
+              <span class="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
+                Test</span>
+            </div>
           </div>
         </a>
       {/each}

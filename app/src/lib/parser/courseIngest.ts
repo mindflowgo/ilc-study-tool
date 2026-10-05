@@ -359,29 +359,12 @@ export class CourseIngest {
     criteria: string[],
     isAssignment: boolean
   ): string {
-    const goalsList = goals.length > 0 ? goals.map((g) => `- ${g}`).join('\n') : '- Synthesize core concepts and curricular expectations.';
-    const criteriaList = criteria.length > 0 ? criteria.map((c) => `- ${c}`).join('\n') : '- Demonstrate understanding through curriculum-aligned applications.';
+    const goalsSection = goals.length > 0 ? `\n\n### Learning Goals\n${goals.map((g) => `- ${g}`).join('\n')}` : '';
+    const criteriaSection = criteria.length > 0 ? `\n\n### Success Criteria\n${criteria.map((c) => `- ${c}`).join('\n')}` : '';
 
-    return `# Study Summary: ${title}
+    return `# Summary: ${title}
 
-## Executive Overview
-This learning activity investigates key concepts under **${courseId.toUpperCase()} Unit ${unit}**. It equips students with the conceptual tools needed to analyze legal structures, evaluate historical developments, and apply constitutional and statutory frameworks in Canada.
-
-## Key Learning Goals
-${goalsList}
-
-## Success Criteria
-${criteriaList}
-
-## Core Concepts & Legal Frameworks
-- **Legal Significance**: Assessing how key decisions, historical events, and statutes shape civic rights and judicial doctrines.
-- **Rule of Law**: The foundational principle that all persons and institutions are accountable to publicly promulgated, equally enforced laws.
-- **Adjudication & Procedure**: How formal legal mechanisms resolve disputes and protect societal order while balancing individual freedoms.
-
-## Exam & Evaluation Focus
-- Distinguishing between primary and secondary sources of law.
-- Analyzing case studies with legal tests and evidentiary standards.
-- Formulating structured arguments using legal terminology and precedents.
+*Not yet generated. This summary can be generated using the AI button above or automatically in the background.*${goalsSection}${criteriaSection}
 `;
   }
 
@@ -392,23 +375,9 @@ ${criteriaList}
     title: string,
     isAssignment: boolean
   ): string {
-    return `# High-Yield Cheatsheet: ${title}
+    return `# Cheatsheet: ${title}
 
-## Terminology Quick Reference
-| Legal Term | Definition | Context / Scope |
-| :--- | :--- | :--- |
-| **Rule of Law** | Principle that no one is above the law and all are subject to the same judicial processes. | Constitutional principle |
-| **Substantive Law** | Laws that define rights, duties, and obligations of citizens. | Criminal Code, Civil Code |
-| **Procedural Law** | Prescribes methods of enforcing legal rights and court processes. | Court rules, police procedures |
-| **Precedent (Stare Decisis)** | Principle requiring courts to follow decisions made by superior courts. | Common Law doctrine |
-
-## Critical Distinctions
-- **Rules vs. Laws**: Rules are established by private institutions (schools, clubs) and apply only to participants. Laws are enacted by governments, apply universally, and carry state enforcement.
-- **Public vs. Private Law**: Public law governs citizen-state interactions (Constitutional, Criminal, Administrative); Private (Civil) law governs citizen-to-citizen disputes (Tort, Contract, Family, Property).
-
-## High-Yield Memory Anchors
-- ⚖️ *Roncarelli v. Duplessis (1959)*: Affirmed that government officials cannot act arbitrarily; no public official is above the law.
-- 📜 *Parliamentary Supremacy*: Within constitutional boundaries, elected legislative bodies hold ultimate power to make and repeal statutes.
+*Not yet generated. This cheatsheet can be generated using the AI button above or automatically in the background.*
 `;
   }
 
@@ -423,50 +392,9 @@ ${criteriaList}
 
     return `course: ${courseCode}
 
-# ${title} - Practice Test
+# Practice Test: ${title}
 
-## Questions
-01) [Knowledge & Understanding] What is the essential difference between a rule and a law in Canadian jurisprudence?
-<Multiple-Choice>
-- [ ] Rules are enforced by the courts; laws are enforced by non-governmental arbiters.
-- [ ] Laws apply to all members of society and are enforced by the state; rules apply only to members of specific organizations.
-- [ ] Rules carry mandatory minimum custodial sentences while laws carry only financial penalties.
-- [ ] Rules apply exclusively to criminal proceedings; laws apply exclusively to contract disputes.
-
---
-
-02) [Thinking & Investigation] Which historical doctrine dictates that courts must adhere to principles established in prior superior court decisions?
-<Multiple-Choice>
-- [ ] Habeas Corpus
-- [ ] Stare Decisis (Rule of Precedent)
-- [ ] Ultra Vires
-- [ ] Mens Rea
-
---
-
-03) [Communication] In an Ontario legal analysis paragraph, what is the role of an explicit 'legal significance' rationale?
-<Multiple-Choice>
-- [ ] To state the verbatim statutory citation without analytical commentary.
-- [ ] To demonstrate how a particular court decision, principle, or event directly reshaped citizen rights or legal institutions.
-- [ ] To summarize the personal background of the presiding judge.
-- [ ] To list the chronological order of court filing dates.
-
---
-
-04) [Application] A municipality passes a bylaw prohibiting skateboard riding on public sidewalks to prevent pedestrian collisions. Which statement accurately categorizes this legal measure?
-<Multiple-Choice>
-- [ ] It is an unofficial rule because it was not enacted by the federal Parliament in Ottawa.
-- [ ] It is a valid law authorized under provincial municipal legislation, enforceable with legal penalties.
-- [ ] It is private contract law binding only on individuals who registered with city hall.
-- [ ] It is an unconstitutional violation that automatically invalidates all provincial traffic acts.
-
---
-
-## Answers
-01) B - (explanation) Laws are enacted by governing authorities, apply universally across a jurisdiction, and are enforced by state organs (police and courts). Rules apply only within voluntary groups or specific venues.
-02) B - (explanation) The doctrine of stare decisis (to stand by things decided) forms the bedrock of the English and Canadian common law systems, promoting predictability and fairness.
-03) B - (explanation) Legal significance in the Ontario curriculum evaluates the magnitude of impact an event, precedent, or statute has on the rights of citizens or legal structures.
-04) B - (explanation) Municipal bylaws are delegated legislation authorized by provincial statutes; they possess the full force of law within the municipal jurisdiction.
+*Not yet generated. This practice test can be generated using the AI button above or automatically in the background.*
 `;
   }
 }

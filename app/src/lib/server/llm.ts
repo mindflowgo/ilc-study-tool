@@ -1,3 +1,21 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+function getDataDir(): string {
+  if (process.env.DATA_DIR && fs.existsSync(process.env.DATA_DIR)) {
+    return process.env.DATA_DIR;
+  }
+  const candidate1 = path.resolve(process.cwd(), 'data');
+  if (fs.existsSync(candidate1)) return candidate1;
+  const candidate2 = path.resolve(process.cwd(), '..', 'data');
+  if (fs.existsSync(candidate2)) return candidate2;
+  return path.resolve(process.cwd(), 'data');
+}
+
+function getStoredConfigPath(): string {
+  return path.join(getDataDir(), 'llm_config.json');
+}
+
 export interface LLMConfig {
   provider: 'openai_compatible' | 'ollama' | 'gemini';
   baseUrl: string;
@@ -30,6 +48,32 @@ export function resolveCompletionsUrl(baseUrl: string): string {
 }
 
 export class LLMService {
+  static loadStoredConfig(): LLMConfig | null {
+    try {
+      const p = getStoredConfigPath();
+      if (fs.existsSync(p)) {
+        return JSON.parse(fs.readFileSync(p, 'utf8'));
+      }
+    } catch (e) {
+      console.warn('Failed to load stored LLM config:', e);
+    }
+    return null;
+  }
+
+  static saveStoredConfig(config: LLMConfig): void {
+    try {
+      const p = getStoredConfigPath();
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      const cleanConfig: LLMConfig = {
+        ...config,
+        model: config.model ? config.model.trim() : ''
+      };
+      fs.writeFileSync(p, JSON.stringify(cleanConfig, null, 2), 'utf8');
+      console.log(`[LLM Config Saved] Base URL: ${cleanConfig.baseUrl}, Model: ${cleanConfig.model || '(server default)'}`);
+    } catch (e) {
+      console.warn('Failed to save stored LLM config:', e);
+    }
+  }
   static async generateResult(config: LLMConfig, systemPrompt: string, userPrompt: string): Promise<LLMResult> {
     const primaryUrl = resolveCompletionsUrl(config.baseUrl);
     const headers: Record<string, string> = {
