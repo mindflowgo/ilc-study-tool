@@ -51,26 +51,221 @@ export function assertTab(value: unknown): string {
   return value;
 }
 
-/**
- * Resolves the root data directory, honouring `DATA_DIR` when it is set and
- * exists. Falls back to `./data` or `../data` so `bun run dev` works from
- * either the repo root or the `app/` directory.
- */
-export function getDataDir(): string {
-  const fromEnv = process.env.DATA_DIR?.trim();
-  if (fromEnv) {
-    const resolved = path.resolve(fromEnv);
-    if (fs.existsSync(resolved)) return resolved;
-    console.warn(`[paths] DATA_DIR="${fromEnv}" does not exist; falling back to the default location.`);
-  }
+export interface AppSettings {
+  data_dir?: string;
+  [key: string]: any;
+}
 
+let runtimeCustomDataDir: string | null = null;
+
+/**
+ * Returns the path to the application settings JSON file in OS-standard config directories.
+ */
+export function getAppSettingsPath(): string {
+  if (process.env.ILC_SETTINGS_PATH?.trim()) {
+    return path.resolve(process.env.ILC_SETTINGS_PATH.trim());
+  }
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  if (process.platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'com.ilc.studytool', 'settings.json');
+  }
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    return path.join(appData, 'com.ilc.studytool', 'settings.json');
+  }
+  const configHome = process.env.XDG_CONFIG_HOME || path.join(home, '.config');
+  return path.join(configHome, 'ilc-study-tool', 'settings.json');
+}
+
+export function loadAppSettings(): AppSettings {
+  try {
+    const p = getAppSettingsPath();
+    if (fs.existsSync(p)) {
+      return JSON.parse(fs.readFileSync(p, 'utf8'));
+    }
+  } catch (e) {
+    console.warn('[paths] Failed to read app settings:', e);
+  }
+  return {};
+}
+
+export function saveAppSettings(settings: Partial<AppSettings>): void {
+  try {
+    const p = getAppSettingsPath();
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    const current = loadAppSettings();
+    const updated = { ...current, ...settings };
+    fs.writeFileSync(p, JSON.stringify(updated, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[paths] Failed to write app settings:', e);
+  }
+}
+
+/**
+ * Returns the conventional default data directory for the host environment.
+ */
+export function getDefaultDataDir(): string {
+  // If running in development repo, ./data or ../data is preferred
   const cwdData = path.resolve(process.cwd(), 'data');
   if (fs.existsSync(cwdData)) return cwdData;
 
   const parentData = path.resolve(process.cwd(), '..', 'data');
   if (fs.existsSync(parentData)) return parentData;
 
-  return cwdData;
+  // OS standard app data directory
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  if (process.platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'com.ilc.studytool', 'data');
+  }
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
+    return path.join(appData, 'com.ilc.studytool', 'data');
+  }
+  const configHome = process.env.XDG_DATA_HOME || path.join(home, '.local', 'share');
+  return path.join(configHome, 'ilc-study-tool', 'data');
+}
+
+/**
+ * Resolves the root data directory, checking in order:
+ *   1. Explicit runtime override (set in current process)
+ *   2. `DATA_DIR` environment variable
+ *   3. Custom `data_dir` saved in settings.json
+ *   4. Conventional default directory
+ */
+export function getDataDir(): string {
+  if (runtimeCustomDataDir) {
+    return runtimeCustomDataDir;
+  }
+
+  const fromEnv = process.env.DATA_DIR?.trim();
+  if (fromEnv) {
+    const resolved = path.resolve(fromEnv);
+    if (fs.existsSync(resolved)) return resolved;
+    console.warn(`[paths] DATA_DIR="${fromEnv}" does not exist; falling back to default.`);
+  }
+
+  const settings = loadAppSettings();
+  if (settings.data_dir && typeof settings.data_dir === 'string' && settings.data_dir.trim()) {
+    const resolved = path.resolve(settings.data_dir.trim());
+    if (fs.existsSync(resolved)) {
+      return resolved;
+    }
+    try {
+      fs.mkdirSync(resolved, { recursive: true });
+      return resolved;
+    } catch (e) {
+      console.warn(`[paths] Could not create configured data directory ${resolved}:`, e);
+    }
+  }
+
+  const def = getDefaultDataDir();
+  try {
+    if (!fs.existsSync(def)) {
+      fs.mkdirSync(def, { recursive: true });
+    }
+  } catch {}
+  return def;
+}
+
+/**
+ * Updates the active data directory and optionally copies existing data.
+ */
+export function setCustomDataDir(
+  newPath: string | null | undefined,
+  migrate: boolean = false
+): { previousDir: string; newDir: string; migratedFiles: number } {
+  const previousDir = getDataDir();
+  let migratedFiles = 0;
+
+  if (!newPath || !newPath.trim()) {
+    saveAppSettings({ data_dir: undefined });
+    runtimeCustomDataDir = null;
+    return { previousDir, newDir: getDataDir(), migratedFiles: 0 };
+  }
+
+  const resolved = path.resolve(newPath.trim());
+  fs.mkdirSync(resolved, { recursive: true });
+
+  if (migrate && previousDir !== resolved && fs.existsSync(previousDir)) {
+    const entries = fs.readdirSync(previousDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const src = path.join(previousDir, entry.name);
+      const dst = path.join(resolved, entry.name);
+      if (!fs.existsSync(dst)) {
+        try {
+          fs.cpSync(src, dst, { recursive: true });
+          migratedFiles++;
+        } catch (e) {
+          console.error(`[paths] Failed to migrate ${src} to ${dst}:`, e);
+        }
+      }
+    }
+  }
+
+  saveAppSettings({ data_dir: resolved });
+  runtimeCustomDataDir = resolved;
+
+  return { previousDir, newDir: resolved, migratedFiles };
+}
+
+function calculateDirSize(dirPath: string): number {
+  let total = 0;
+  try {
+    if (!fs.existsSync(dirPath)) return 0;
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        total += calculateDirSize(full);
+      } else if (entry.isFile()) {
+        total += fs.statSync(full).size;
+      }
+    }
+  } catch {}
+  return total;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+export function getDataStorageInfo(): {
+  dataDir: string;
+  defaultDataDir: string;
+  isCustom: boolean;
+  courseCount: number;
+  coursesCount: number;
+  totalSize: number;
+  totalSizeBytes: number;
+  totalSizeFormatted: string;
+} {
+  const activeDir = getDataDir();
+  const defaultDir = getDefaultDataDir();
+  const isCustom = path.resolve(activeDir) !== path.resolve(defaultDir);
+
+  const coursesDir = path.join(activeDir, 'courses');
+  let coursesCount = 0;
+  if (fs.existsSync(coursesDir)) {
+    coursesCount = fs.readdirSync(coursesDir, { withFileTypes: true }).filter((d) => d.isDirectory()).length;
+  }
+
+  const totalSizeBytes = calculateDirSize(activeDir);
+  const totalSizeFormatted = formatBytes(totalSizeBytes);
+
+  return {
+    dataDir: activeDir,
+    defaultDataDir: defaultDir,
+    isCustom,
+    courseCount: coursesCount,
+    coursesCount,
+    totalSize: totalSizeBytes,
+    totalSizeBytes,
+    totalSizeFormatted
+  };
 }
 
 export function getCoursesDir(): string {

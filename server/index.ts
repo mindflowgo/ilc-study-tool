@@ -13,9 +13,12 @@ import {
   assertLessonId,
   assertPromptId,
   assertTab,
-  PathValidationError
+  PathValidationError,
+  getDataStorageInfo,
+  setCustomDataDir
 } from '../app/src/lib/server/paths';
 import { optimizeCourseImages } from '../app/src/lib/parser/imageOptimizer';
+import { createDataBackupZip, restoreDataBackupZip } from '../app/src/lib/server/backup';
 
 const PORT = parseInt(process.env.PORT || '3182', 10);
 const APP_BUILD_DIR = path.resolve(import.meta.dir, '../app/build');
@@ -191,6 +194,66 @@ async function handleApiRequest(req: Request, url: URL): Promise<Response> {
         { converted: 0, bytesBefore: 0, bytesAfter: 0 }
       );
       return json({ success: true, results, totals });
+    }
+
+    // 4b. Storage Settings Endpoints
+    if (pathname === '/api/settings/storage') {
+      if (method === 'GET') {
+        return json(getDataStorageInfo());
+      }
+      if (method === 'POST') {
+        const body = await req.json();
+        const { dataDir, migrate } = body;
+        const result = setCustomDataDir(dataDir, Boolean(migrate));
+        return json({
+          success: true,
+          ...getDataStorageInfo(),
+          migratedFiles: result.migratedFiles
+        });
+      }
+    }
+
+    if (pathname === '/api/settings/open-folder' && method === 'POST') {
+      const dataDir = getDataDir();
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      const platform = process.platform;
+      const binary = platform === 'darwin' ? 'open' : platform === 'win32' ? 'explorer' : 'xdg-open';
+      execFile(binary, [dataDir], (err) => {
+        if (err) console.error(`Failed to open data directory '${dataDir}':`, err);
+      });
+      return json({ success: true, message: `Opened ${dataDir}`, path: dataDir });
+    }
+
+    // 4c. Backup Export and Import Endpoints
+    if (pathname === '/api/backup/export' && method === 'GET') {
+      const { buffer, filename } = createDataBackupZip();
+      return new Response(buffer, {
+        headers: {
+          'Content-Type': 'application/zip',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Cache-Control': 'no-cache',
+          ...CORS_HEADERS
+        }
+      });
+    }
+
+    if (pathname === '/api/backup/import' && method === 'POST') {
+      const formData = await req.formData();
+      const file = formData.get('file') as File | null;
+      if (!file) return error(400, 'A .zip backup file is required');
+      if (!file.name.toLowerCase().endsWith('.zip')) {
+        return error(400, 'Invalid file format. Please upload a .zip file.');
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const result = restoreDataBackupZip(buffer);
+      return json({
+        success: true,
+        message: `Successfully restored ${result.coursesRestored} courses and ${result.filesRestored} files.`,
+        ...result
+      });
     }
 
     // 5. Courses List

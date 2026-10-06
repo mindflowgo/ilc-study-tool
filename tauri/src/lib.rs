@@ -18,8 +18,8 @@ fn save_pdf_file(path: String, data_b64: String) -> Result<(), String> {
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
-    if ext != "pdf" && ext != "md" && ext != "png" {
-        return Err("Only .pdf, .md, and .png file exports are permitted".into());
+    if ext != "pdf" && ext != "md" && ext != "png" && ext != "zip" {
+        return Err("Only .pdf, .md, .png, and .zip file exports are permitted".into());
     }
 
     let path_str = path.to_lowercase();
@@ -77,6 +77,16 @@ fn open_directory(_path: &Path) -> Result<(), String> {
 
 fn find_course_dir(app: &tauri::AppHandle, course_id: &str) -> Option<PathBuf> {
     let lower_id = course_id.to_lowercase();
+
+    // 0. Custom data_dir from settings.json
+    if let Some(val) = settings::get_setting_value(app, "data_dir") {
+        if let Some(str_path) = val.as_str() {
+            let p = PathBuf::from(str_path).join("courses").join(&lower_id);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
 
     // 1. Env variable DATA_DIR
     if let Ok(data_env) = std::env::var("DATA_DIR") {
@@ -172,21 +182,31 @@ fn open_course_folder(app: tauri::AppHandle, course_id: String, path: Option<Str
 
 struct BackendProcess(std::sync::Mutex<Option<std::process::Child>>);
 
-fn start_backend_process(app: &tauri::App) -> Option<std::process::Child> {
-    let data_dir = if let Ok(d) = std::env::var("DATA_DIR") {
-        PathBuf::from(d)
-    } else if let Ok(cwd) = std::env::current_dir() {
+fn get_default_data_dir(app: &tauri::App) -> PathBuf {
+    if let Ok(cwd) = std::env::current_dir() {
         if cwd.join("data").exists() {
-            cwd.join("data")
+            return cwd.join("data");
         } else if cwd.join("..").join("data").exists() {
-            cwd.join("..").join("data")
-        } else {
-            app.path().app_data_dir().unwrap_or_else(|_| cwd.join("data"))
+            return cwd.join("..").join("data");
         }
+    }
+    app.path()
+        .app_data_dir()
+        .map(|d| d.join("data"))
+        .unwrap_or_else(|_| PathBuf::from("./data"))
+}
+
+fn start_backend_process(app: &tauri::App) -> Option<std::process::Child> {
+    let data_dir = if let Some(val) = settings::get_setting_value(app.handle(), "data_dir") {
+        if let Some(s) = val.as_str() {
+            PathBuf::from(s)
+        } else {
+            get_default_data_dir(app)
+        }
+    } else if let Ok(d) = std::env::var("DATA_DIR") {
+        PathBuf::from(d)
     } else {
-        app.path()
-            .app_data_dir()
-            .unwrap_or_else(|_| PathBuf::from("./data"))
+        get_default_data_dir(app)
     };
 
     let mut cmd: Option<Command> = None;
