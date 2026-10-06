@@ -31,8 +31,10 @@
     Check,
     Plus,
     X,
-    RefreshCw
+    RefreshCw,
+    FileDown
   } from 'lucide-svelte';
+  import { exportDocumentToPdf } from '$lib/pdf/exportPdf';
 
   let courseId = $derived($page.params.course_id);
   let course: CourseManifest | null = $state(null);
@@ -74,6 +76,7 @@
   let isLoadingLesson = $state(false);
   let isSaving = $state(false);
   let saveSuccessMessage = $state('');
+  let isExportingPdf = $state(false);
 
   // Default prompt for active tab
   let defaultPromptForActiveTab = $derived.by(() => {
@@ -560,6 +563,32 @@
     isEditing = false;
   }
 
+  async function handleExportPDF() {
+    if (isExportingPdf || !course || !selectedLessonId) return;
+
+    isExportingPdf = true;
+    try {
+      const activeVer = currentTabVersions.find((v) => v.id === activeVersionId);
+      const exportTabName = activeTab === 'lesson' ? 'Course Notes' : tabDisplayName || activeTab;
+
+      await exportDocumentToPdf({
+        courseCode: course.id,
+        courseTitle: course.title,
+        lessonId: selectedLessonId,
+        lessonTitle: currentLessonTitle || selectedLessonId,
+        tab: activeTab,
+        tabDisplayName: exportTabName,
+        version: activeVer?.versionNumber,
+        rawMarkdown: tabContents[activeTab]
+      });
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+      alert('Failed to generate PDF. Please check the browser console for details.');
+    } finally {
+      isExportingPdf = false;
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
       e.preventDefault();
@@ -764,7 +793,7 @@
         <!-- Main Card with Sticky Top-Right [Edit] or [Cancel] | [Save] Controls -->
         <div class="relative bg-white rounded-2xl border border-stone-200 shadow-2xs group">
           <!-- Top-Right Action Controls (Sticky) -->
-          <div class="sticky top-1 sm:top-2 z-30 flex justify-end px-4 sm:px-6 pt-3 sm:pt-4 -mb-10 sm:-mb-12 pointer-events-none">
+          <div class="sticky top-0 z-30 flex justify-end px-4 sm:px-6 pt-0.5 -mb-[30px] sm:-mb-[34px] pointer-events-none">
             <div class="pointer-events-auto flex items-center space-x-2">
               {#if isEditing}
                 <button
@@ -794,6 +823,21 @@
                   {/if}
                 </button>
               {:else}
+                <button
+                  onclick={handleExportPDF}
+                  disabled={isExportingPdf}
+                  class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer disabled:opacity-50"
+                  title="Generate and download PDF for this document"
+                >
+                  {#if isExportingPdf}
+                    <Loader2 class="w-3.5 h-3.5 animate-spin text-stone-500" />
+                    <span>PDF...</span>
+                  {:else}
+                    <FileDown class="w-3.5 h-3.5 text-stone-500" />
+                    <span>PDF</span>
+                  {/if}
+                </button>
+
                 <button
                   onclick={() => (isEditing = true)}
                   class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer"

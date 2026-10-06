@@ -33,6 +33,12 @@ export interface CourseManifest {
   description: string;
   units: CourseManifestUnit[];
   updatedAt: string;
+  path?: string;
+  courseDocs?: {
+    summary: boolean;
+    cheatsheet: boolean;
+    test: boolean;
+  };
 }
 
 export interface IngestOptions {

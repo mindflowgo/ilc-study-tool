@@ -7,10 +7,12 @@
     "dev": "bun --cwd app dev",
     "build": "bun --cwd app build",
     "check": "bun --cwd app check",
-    "parse": "bun --cwd app run parse",
-    "tauri": "cd tauri && bunx @tauri-apps/cli dev",
-    "tauri:dev": "bun --cwd app run build && cd tauri && bunx @tauri-apps/cli dev",
-    "tauri:build": "bun --cwd app run build && cd tauri && bunx @tauri-apps/cli build"
+    "parse": "bun --cwd app parse",
+    "tauri": "bun --cwd tauri dev",
+    "tauri:dev": "bun --cwd app build && bun --cwd tauri dev",
+    "tauri:build": "bun --cwd app build && bun --cwd tauri build",
+    "tauri:build:mac": "bun --cwd app build && bun --cwd tauri build:mac",
+    "tauri:build:win": "bun --cwd app build && bun --cwd tauri build:win"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.1"

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
+    "build:mac": "tauri build --bundles dmg",
+    "build:win": "tauri build --bundles nsis",
     "cargo:check": "cargo check",
     "cargo:build": "cargo build --release"
   },

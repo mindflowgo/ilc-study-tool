@@ -47,7 +47,7 @@
 
 <div class="h-full flex flex-col">
   <!-- Quiz Header -->
-  <div class="flex items-center justify-between pb-4 mb-4 border-b border-stone-200 pr-36">
+  <div class="flex items-center justify-between pb-4 mb-4 border-b border-stone-200 pr-48 sm:pr-56">
     <div>
       <h2 class="text-base font-semibold text-stone-900">{parsedQuiz.title}</h2>
       <p class="text-xs text-stone-500">

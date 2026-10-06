@@ -13,13 +13,114 @@
     FileText,
     Sparkles,
     CheckCircle2,
-    ArrowRight
+    ArrowRight,
+    Folder,
+    Loader2
   } from 'lucide-svelte';
+  import { exportDocumentToPdf } from '$lib/pdf/exportPdf';
 
   let courses: CourseManifest[] = $state([]);
   let isLoading = $state(true);
   let searchQuery = $state('');
   let isUploadModalOpen = $state(false);
+  let activeDownloads: Record<string, string | null> = $state({});
+
+  async function handleDownloadCoursePdf(
+    course: CourseManifest,
+    type: 'notes' | 'summary' | 'cheatsheet' | 'test'
+  ) {
+    const key = `${course.id}:${type}`;
+    if (activeDownloads[key]) return;
+    activeDownloads[key] = 'loading';
+
+    try {
+      if (type === 'notes') {
+        const res = await fetch(`/api/courses/${course.id}/course-docs?type=notes`);
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || 'Failed to assemble course notes');
+        }
+        const data = await res.json();
+        if (!data.markdown || !data.markdown.trim()) {
+          throw new Error('No lesson notes found for this course');
+        }
+
+        await exportDocumentToPdf({
+          courseCode: course.id,
+          courseTitle: course.title,
+          lessonId: 'Course',
+          lessonTitle: 'Complete Course Notes',
+          tab: 'lesson',
+          tabDisplayName: 'Complete Notes',
+          rawMarkdown: data.markdown
+        });
+      } else {
+        // summary, cheatsheet, test
+        const res = await fetch(`/api/courses/${course.id}/course-docs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || errData.error || `Failed to generate course ${type}`);
+        }
+        const data = await res.json();
+        if (!data.markdown || !data.markdown.trim()) {
+          throw new Error(`Generated course ${type} was empty`);
+        }
+
+        // Update local courseDocs state
+        if (!course.courseDocs) {
+          course.courseDocs = { summary: false, cheatsheet: false, test: false };
+        }
+        course.courseDocs[type] = true;
+
+        const displayTitles: Record<string, { lessonTitle: string; tabDisplayName: string }> = {
+          summary: { lessonTitle: 'Comprehensive Course Summary', tabDisplayName: 'Course Summary' },
+          cheatsheet: { lessonTitle: 'Master Course Cheatsheet', tabDisplayName: 'Course Cheatsheet' },
+          test: { lessonTitle: 'Final Course Practice Exam', tabDisplayName: 'Course Practice Test' }
+        };
+
+        await exportDocumentToPdf({
+          courseCode: course.id,
+          courseTitle: course.title,
+          lessonId: 'Course',
+          lessonTitle: displayTitles[type].lessonTitle,
+          tab: type,
+          tabDisplayName: displayTitles[type].tabDisplayName,
+          rawMarkdown: data.markdown
+        });
+      }
+    } catch (err: any) {
+      console.error(`Failed to export course ${type}:`, err);
+      alert(err?.message || `Failed to download course ${type} PDF`);
+    } finally {
+      delete activeDownloads[key];
+    }
+  }
+
+  async function openCourseFolder(courseId: string, path?: string) {
+    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('open_course_folder', { courseId, path });
+        return;
+      } catch (err) {
+        console.error('Failed to open course folder via Tauri:', err);
+      }
+    }
+
+    try {
+      const res = await fetch(`/api/courses/${courseId}/open`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Failed to open course folder via API:', data.error || res.statusText);
+      }
+    } catch (e) {
+      console.error('Failed to open course folder:', e);
+    }
+  }
 
   async function loadCourses() {
     isLoading = true;
@@ -131,17 +232,108 @@
 
           <!-- Bottom Footer -->
           <div class="mt-1 pt-2 border-t border-stone-100">
-            <div class="text-xs text-stone-400 mt-0.5">Download Course PDFs</div>
+            <div class="flex items-center justify-between">
+              <div class="text-xs text-stone-400 mt-0.5">Download Course PDFs</div>
+              <button
+                type="button"
+                title="Open course folder"
+                aria-label="Open course folder"
+                onclick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  openCourseFolder(course.id, course.path);
+                }}
+                class="p-1 -mr-1 rounded-md text-stone-400 hover:text-stone-800 hover:bg-stone-100 hover:border-stone-200 border border-transparent transition cursor-pointer"
+              >
+                <Folder class="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-            <div class="flex items-center justify-between text-xs font-medium text-stone-700 group-hover:text-stone-900">
-              <span class="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
-                Notes</span> 
-              <span class="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
-                Summary</span> 
-              <span class="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
-                Cheatsheet</span>
-              <span class="text-xs px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
-                Test</span>
+            <div class="grid grid-cols-4 gap-1.5 text-xs font-medium text-stone-700 mt-2">
+              <!-- Notes -->
+              <button
+                type="button"
+                title="Download complete course notes PDF"
+                onclick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDownloadCoursePdf(course, 'notes');
+                }}
+                disabled={Boolean(activeDownloads[`${course.id}:notes`])}
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 hover:bg-stone-200 hover:text-stone-900 text-stone-800 border border-stone-200 transition cursor-pointer disabled:opacity-50"
+              >
+                {#if activeDownloads[`${course.id}:notes`]}
+                  <Loader2 class="w-3 h-3 animate-spin text-stone-600" />
+                {:else}
+                  <span>Notes</span>
+                {/if}
+              </button>
+
+              <!-- Summary -->
+              <button
+                type="button"
+                title={course.courseDocs?.summary ? 'Download Course Summary PDF' : 'Generate & Download Course Summary PDF'}
+                onclick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDownloadCoursePdf(course, 'summary');
+                }}
+                disabled={Boolean(activeDownloads[`${course.id}:summary`])}
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 hover:bg-stone-200 hover:text-stone-900 text-stone-800 border border-stone-200 transition cursor-pointer disabled:opacity-50 relative"
+              >
+                {#if activeDownloads[`${course.id}:summary`]}
+                  <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
+                {:else}
+                  <span>Summary</span>
+                  {#if course.courseDocs?.summary}
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
+                  {/if}
+                {/if}
+              </button>
+
+              <!-- Cheatsheet -->
+              <button
+                type="button"
+                title={course.courseDocs?.cheatsheet ? 'Download Course Cheatsheet PDF' : 'Generate & Download Course Cheatsheet PDF'}
+                onclick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDownloadCoursePdf(course, 'cheatsheet');
+                }}
+                disabled={Boolean(activeDownloads[`${course.id}:cheatsheet`])}
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 hover:bg-stone-200 hover:text-stone-900 text-stone-800 border border-stone-200 transition cursor-pointer disabled:opacity-50 relative"
+              >
+                {#if activeDownloads[`${course.id}:cheatsheet`]}
+                  <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
+                {:else}
+                  <span>Cheatsheet</span>
+                  {#if course.courseDocs?.cheatsheet}
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
+                  {/if}
+                {/if}
+              </button>
+
+              <!-- Test -->
+              <button
+                type="button"
+                title={course.courseDocs?.test ? 'Download Course Practice Test PDF' : 'Generate & Download Course Practice Test PDF'}
+                onclick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleDownloadCoursePdf(course, 'test');
+                }}
+                disabled={Boolean(activeDownloads[`${course.id}:test`])}
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 hover:bg-stone-200 hover:text-stone-900 text-stone-800 border border-stone-200 transition cursor-pointer disabled:opacity-50 relative"
+              >
+                {#if activeDownloads[`${course.id}:test`]}
+                  <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
+                {:else}
+                  <span>Test</span>
+                  {#if course.courseDocs?.test}
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
+                  {/if}
+                {/if}
+              </button>
             </div>
           </div>
         </a>
