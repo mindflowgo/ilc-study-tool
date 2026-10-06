@@ -1,21 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CourseManifest } from '../parser/courseIngest';
-
-function getDataDir(): string {
-  // Check environment variable or resolve relative to workspace
-  if (process.env.DATA_DIR && fs.existsSync(process.env.DATA_DIR)) {
-    return process.env.DATA_DIR;
-  }
-  // Try relative to app or relative to root
-  const candidate1 = path.resolve(process.cwd(), 'data');
-  if (fs.existsSync(candidate1)) return candidate1;
-
-  const candidate2 = path.resolve(process.cwd(), '..', 'data');
-  if (fs.existsSync(candidate2)) return candidate2;
-
-  return path.resolve(process.cwd(), 'data');
-}
+import {
+  assertCourseId,
+  assertLessonId,
+  assertTab,
+  getCoursesDir as resolveCoursesDir,
+  getDataDir,
+  normalizeCourseId,
+  safeJoin,
+  trySafeJoin,
+} from './paths';
 
 export interface LessonFileVersion {
   id: string; // e.g. "summary" or "summary-2"
@@ -39,7 +34,12 @@ export interface LessonContentBundle {
 
 export class CourseService {
   static getCoursesDir(): string {
-    return path.join(getDataDir(), 'courses');
+    return resolveCoursesDir();
+  }
+
+  /** Absolute course directory, validated so the id cannot escape the data dir. */
+  private static courseDir(courseId: unknown): string {
+    return safeJoin(resolveCoursesDir(), normalizeCourseId(courseId));
   }
 
   static listCourses(): CourseManifest[] {
@@ -77,8 +77,8 @@ export class CourseService {
   }
 
   static getCourse(courseId: string): CourseManifest | null {
-    const courseFolder = path.join(this.getCoursesDir(), courseId.toLowerCase());
-    const metaPath = path.join(courseFolder, 'meta.json');
+    const courseFolder = this.courseDir(courseId);
+    const metaPath = safeJoin(courseFolder, 'meta.json');
     if (!fs.existsSync(metaPath)) return null;
 
     try {
@@ -101,7 +101,8 @@ export class CourseService {
   }
 
   static getLessonContent(courseId: string, lessonId: string): LessonContentBundle | null {
-    const courseDir = path.join(this.getCoursesDir(), courseId.toLowerCase());
+    const lesson = assertLessonId(lessonId);
+    const courseDir = this.courseDir(courseId);
     if (!fs.existsSync(courseDir)) return null;
 
     const files = fs.readdirSync(courseDir);
@@ -131,13 +132,13 @@ export class CourseService {
     const tests = getVersions('test');
 
     const readSafe = (filename: string): string => {
-      const filePath = path.join(courseDir, filename);
+      const filePath = safeJoin(courseDir, filename);
       return fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
     };
 
     return {
       courseId,
-      lessonId,
+      lessonId: lesson,
       lesson: readSafe(`${lessonId}.lesson.md`),
       summary: summaries[0]?.content || readSafe(`${lessonId}.summary.md`),
       cheatsheet: cheatsheets[0]?.content || readSafe(`${lessonId}.cheatsheet.md`),
@@ -183,7 +184,7 @@ export class CourseService {
     }
 
     const filename = `${lessonId}.${targetTab}.md`;
-    const filePath = path.join(courseDir, filename);
+    const filePath = safeJoin(courseDir, filename);
 
     try {
       fs.writeFileSync(filePath, content, 'utf8');
@@ -195,13 +196,13 @@ export class CourseService {
   }
 
   static resolveAssetPath(courseId: string, subPath: string): string | null {
-    const sanitized = path.normalize(subPath).replace(/^(\.\.(\/|\\|$))+/, '');
-    const fullPath = path.join(this.getCoursesDir(), courseId.toLowerCase(), 'assets', sanitized);
-    return fs.existsSync(fullPath) ? fullPath : null;
+    const fullPath = trySafeJoin(resolveCoursesDir(), normalizeCourseId(courseId), 'assets', subPath);
+    if (!fullPath || !fs.existsSync(fullPath)) return null;
+    return fs.statSync(fullPath).isFile() ? fullPath : null;
   }
 
   static getCourseDocumentPath(courseId: string, type: 'summary' | 'cheatsheet' | 'test'): string {
-    return path.join(this.getCoursesDir(), courseId.toLowerCase(), `course.${type}.md`);
+    return safeJoin(this.courseDir(courseId), `course.${type}.md`);
   }
 
   static getCourseDocument(courseId: string, type: 'summary' | 'cheatsheet' | 'test'): string | null {
@@ -210,7 +211,7 @@ export class CourseService {
   }
 
   static saveCourseDocument(courseId: string, type: 'summary' | 'cheatsheet' | 'test', content: string): boolean {
-    const courseDir = path.join(this.getCoursesDir(), courseId.toLowerCase());
+    const courseDir = this.courseDir(courseId);
     if (!fs.existsSync(courseDir)) {
       fs.mkdirSync(courseDir, { recursive: true });
     }
@@ -229,7 +230,7 @@ export class CourseService {
     type: 'lesson' | 'summary' | 'cheatsheet' | 'test'
   ): Array<{ unitNumber: number; unitTitle: string; lessonId: string; lessonTitle: string; content: string }> {
     const course = this.getCourse(courseId);
-    const courseDir = path.join(this.getCoursesDir(), courseId.toLowerCase());
+    const courseDir = this.courseDir(courseId);
     if (!course || !fs.existsSync(courseDir)) return [];
 
     const files = fs.readdirSync(courseDir);
@@ -263,9 +264,9 @@ export class CourseService {
             .sort((a, b) => b.version - a.version);
 
           if (matching.length > 0) {
-            content = fs.readFileSync(path.join(courseDir, matching[0].file), 'utf8');
+            content = fs.readFileSync(safeJoin(courseDir, matching[0].file), 'utf8');
           } else {
-            const fallbackFile = path.join(courseDir, `${lesson.id}.${type}.md`);
+            const fallbackFile = safeJoin(courseDir, `${lesson.id}.${type}.md`);
             if (fs.existsSync(fallbackFile)) {
               content = fs.readFileSync(fallbackFile, 'utf8');
             }

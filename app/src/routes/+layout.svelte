@@ -1,5 +1,9 @@
 <script lang="ts">
   import '../app.css';
+  import { initApiInterceptor } from '$lib/api';
+
+  initApiInterceptor();
+
   let { children } = $props();
 </script>
 

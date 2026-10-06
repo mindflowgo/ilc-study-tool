@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { CourseIngest } from '$lib/parser/courseIngest';
 import { CourseService } from '$lib/server/courses';
+import { assertCourseId, assertLessonId, safeJoin } from '$lib/server/paths';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
@@ -11,26 +12,41 @@ export const POST: RequestHandler = async ({ request }) => {
   // If multipart form data (file upload)
   if (contentType.includes('multipart/form-data')) {
     const formData = await request.formData();
-    const courseId = (formData.get('courseId') as string)?.trim().toLowerCase() || 'new_course';
+    const rawCourseId = (formData.get('courseId') as string)?.trim().toLowerCase() || 'new_course';
+    let courseId: string;
+    try {
+      courseId = assertCourseId(rawCourseId).toLowerCase();
+    } catch {
+      throw error(400, `Invalid courseId: "${rawCourseId}"`);
+    }
+
     const files = formData.getAll('files') as File[];
     const mode = (formData.get('mode') as string) || 'add';
     const targetLessonId = (formData.get('targetLessonId') as string)?.trim() || '';
+    if (targetLessonId) {
+      try {
+        assertLessonId(targetLessonId);
+      } catch {
+        throw error(400, `Invalid targetLessonId: "${targetLessonId}"`);
+      }
+    }
     const overwriteExisting = formData.get('overwriteExisting') === 'true';
 
     if (!files.length) {
       throw error(400, 'No files provided');
     }
 
-    const courseDir = path.join(CourseService.getCoursesDir(), courseId);
-    const backupDir = path.join(courseDir, '_backup');
+    const courseDir = safeJoin(CourseService.getCoursesDir(), courseId);
+    const backupDir = safeJoin(courseDir, '_backup');
     fs.mkdirSync(backupDir, { recursive: true });
 
     const uploadedFilenames: string[] = [];
     for (const file of files) {
-      if (/\.(zip|mhtml|mht|html|htm)$/i.test(file.name)) {
+      const safeFilename = path.basename(file.name);
+      if (/\.(zip|mhtml|mht|html|htm)$/i.test(safeFilename)) {
         const buffer = Buffer.from(await file.arrayBuffer());
-        fs.writeFileSync(path.join(backupDir, file.name), buffer);
-        uploadedFilenames.push(file.name);
+        fs.writeFileSync(safeJoin(backupDir, safeFilename), buffer);
+        uploadedFilenames.push(safeFilename);
       }
     }
 
@@ -54,7 +70,15 @@ export const POST: RequestHandler = async ({ request }) => {
   const ingester = new CourseIngest();
 
   if (courseId) {
-    const coursePath = path.join(coursesDir, courseId);
+    let safeCourseId: string;
+    try {
+      safeCourseId = assertCourseId(courseId).toLowerCase();
+      if (lessonId) assertLessonId(lessonId);
+    } catch {
+      throw error(400, `Invalid courseId or lessonId: "${courseId}"`);
+    }
+
+    const coursePath = safeJoin(coursesDir, safeCourseId);
     if (!fs.existsSync(coursePath)) {
       throw error(404, `Course ${courseId} not found`);
     }

@@ -1,15 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-
-function getPromptsDir(): string {
-  const candidate1 = path.resolve(process.cwd(), 'data', 'prompts');
-  if (fs.existsSync(candidate1)) return candidate1;
-
-  const candidate2 = path.resolve(process.cwd(), '..', 'data', 'prompts');
-  if (fs.existsSync(candidate2)) return candidate2;
-
-  return candidate1;
-}
+import { getPromptsDir, assertPromptId, safeJoin } from './paths';
 
 export interface PromptItem {
   id: string; // e.g. "summary", "cheatsheet", "test_kica"
@@ -45,24 +36,26 @@ export class PromptService {
   }
 
   static getPrompt(id: string): PromptItem | null {
+    const safeId = assertPromptId(id);
     const dir = getPromptsDir();
-    const fullPath = path.join(dir, `${id}.md`);
+    const fullPath = safeJoin(dir, `${safeId}.md`);
     if (!fs.existsSync(fullPath)) return null;
 
     const content = fs.readFileSync(fullPath, 'utf8');
     const titleMatch = content.match(/^#\s+(.*)/m);
     return {
-      id,
-      title: titleMatch ? titleMatch[1].trim() : id,
-      filename: `${id}.md`,
+      id: safeId,
+      title: titleMatch ? titleMatch[1].trim() : safeId,
+      filename: `${safeId}.md`,
       content
     };
   }
 
   static savePrompt(id: string, content: string): boolean {
+    const safeId = assertPromptId(id);
     const dir = getPromptsDir();
     fs.mkdirSync(dir, { recursive: true });
-    const fullPath = path.join(dir, `${id}.md`);
+    const fullPath = safeJoin(dir, `${safeId}.md`);
 
     try {
       fs.writeFileSync(fullPath, content, 'utf8');

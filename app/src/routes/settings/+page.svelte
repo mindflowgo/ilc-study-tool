@@ -9,7 +9,8 @@
     CheckCircle2,
     AlertCircle,
     Loader2,
-    Save
+    Save,
+    ImageDown
   } from 'lucide-svelte';
 
   let provider = $state('openai_compatible');
@@ -25,16 +26,37 @@
   let isReparsing = $state(false);
   let reparseResult: string = $state('');
   let saveMessage = $state('');
+  let hasStoredApiKey = $state(false);
+
+  let isCompressingImages = $state(false);
+  let compressImagesResult: string = $state('');
 
   function loadSettings() {
+    // Clean up any legacy API key from localStorage
     if (typeof localStorage !== 'undefined') {
-      provider = localStorage.getItem('ilc_llm_provider') || 'openai_compatible';
-      baseUrl = localStorage.getItem('ilc_llm_baseUrl') || 'http://localhost:11434/v1';
-      apiKey = localStorage.getItem('ilc_llm_apiKey') || '';
-      authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
-      model = localStorage.getItem('ilc_llm_model') ?? '';
-      temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
+      localStorage.removeItem('ilc_llm_apiKey');
     }
+
+    // Load canonical config from server
+    fetch('/api/llm')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.config) {
+          provider = data.config.provider || 'openai_compatible';
+          baseUrl = data.config.baseUrl || 'http://localhost:11434/v1';
+          model = data.config.model ?? '';
+          authHeaderType = data.config.authHeaderType || 'bearer';
+          temperature = data.config.temperature ?? 0.3;
+          hasStoredApiKey = Boolean(data.config.hasApiKey);
+        } else if (typeof localStorage !== 'undefined') {
+          provider = localStorage.getItem('ilc_llm_provider') || 'openai_compatible';
+          baseUrl = localStorage.getItem('ilc_llm_baseUrl') || 'http://localhost:11434/v1';
+          authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
+          model = localStorage.getItem('ilc_llm_model') ?? '';
+          temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
+        }
+      })
+      .catch(() => {});
   }
 
   function saveSettings() {
@@ -42,7 +64,7 @@
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('ilc_llm_provider', provider);
       localStorage.setItem('ilc_llm_baseUrl', baseUrl);
-      localStorage.setItem('ilc_llm_apiKey', apiKey);
+      localStorage.removeItem('ilc_llm_apiKey');
       localStorage.setItem('ilc_llm_authHeaderType', authHeaderType);
       localStorage.setItem('ilc_llm_model', cleanModel);
       localStorage.setItem('ilc_llm_temp', temperature.toString());
@@ -61,13 +83,20 @@
         config: {
           provider,
           baseUrl,
-          apiKey,
+          apiKey: apiKey || undefined,
           authHeaderType,
           model: cleanModel,
           temperature
         }
       })
-    }).catch((err) => console.warn('Failed to sync LLM config to server:', err));
+    })
+      .then(() => {
+        if (apiKey) {
+          hasStoredApiKey = true;
+          apiKey = '';
+        }
+      })
+      .catch((err) => console.warn('Failed to sync LLM config to server:', err));
   }
 
   async function testConnection() {
@@ -129,6 +158,36 @@
     }
   }
 
+  async function compressCourseImages() {
+    isCompressingImages = true;
+    compressImagesResult = '';
+
+    try {
+      const res = await fetch('/api/maintenance/compress-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const { converted, bytesBefore, bytesAfter } = data.totals ?? {};
+        const mb = (n: number) => `${(Number(n || 0) / 1048576).toFixed(1)}MB`;
+        if (converted > 0) {
+          compressImagesResult = `Compressed ${converted} image(s): ${mb(bytesBefore)} → ${mb(bytesAfter)} across ${data.results?.length ?? 0} course(s).`;
+        } else {
+          compressImagesResult = 'All course images are already optimized — nothing to compress.';
+        }
+      } else {
+        compressImagesResult = 'Failed to compress course images.';
+      }
+    } catch (err: any) {
+      compressImagesResult = 'Error during compression: ' + err?.message;
+    } finally {
+      isCompressingImages = false;
+    }
+  }
+
   onMount(() => {
     loadSettings();
   });
@@ -182,7 +241,7 @@
           id="api-key-input"
           type="password"
           bind:value={apiKey}
-          placeholder="sk-..."
+          placeholder={hasStoredApiKey ? 'Key saved on server (leave blank to keep)' : 'sk-...'}
           class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
         />
       </div>
@@ -285,5 +344,31 @@
         <span>Re-parse All Courses</span>
       {/if}
     </button>
+
+    <div class="flex items-center justify-between gap-3 pt-2 border-t border-stone-100">
+      <p class="text-xs text-stone-600 leading-relaxed">
+        Compress oversized course images: anything wider than 512px is resized to 512px and converted
+        to JPEG; oversized markdown images get a 50% width spec.
+      </p>
+      <button
+        onclick={compressCourseImages}
+        disabled={isCompressingImages}
+        class="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-medium transition shrink-0"
+      >
+        {#if isCompressingImages}
+          <Loader2 class="w-3.5 h-3.5 animate-spin" />
+          <span>Compressing...</span>
+        {:else}
+          <ImageDown class="w-3.5 h-3.5" />
+          <span>Compress Course Images</span>
+        {/if}
+      </button>
+    </div>
+
+    {#if compressImagesResult}
+      <div class="text-xs p-3 rounded-lg bg-stone-50 border border-stone-200 text-stone-800">
+        {compressImagesResult}
+      </div>
+    {/if}
   </section>
 </main>

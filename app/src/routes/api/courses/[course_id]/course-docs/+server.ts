@@ -2,9 +2,15 @@ import { json, error } from '@sveltejs/kit';
 import { CourseService } from '$lib/server/courses';
 import { PromptService } from '$lib/server/prompts';
 import { LLMService, type LLMConfig } from '$lib/server/llm';
+import { assertCourseId } from '$lib/server/paths';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ params, url }) => {
+  try {
+    assertCourseId(params.course_id);
+  } catch {
+    throw error(400, 'Invalid course identifier');
+  }
   const courseId = params.course_id;
   const course = CourseService.getCourse(courseId);
   if (!course) {
@@ -38,6 +44,11 @@ export const GET: RequestHandler = async ({ params, url }) => {
 };
 
 export const POST: RequestHandler = async ({ params, request }) => {
+  try {
+    assertCourseId(params.course_id);
+  } catch {
+    throw error(400, 'Invalid course identifier');
+  }
   const courseId = params.course_id;
   const course = CourseService.getCourse(courseId);
   if (!course) {

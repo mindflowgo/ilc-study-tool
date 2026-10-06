@@ -206,10 +206,14 @@ class GenerationQueue {
 
   pause(): void {
     this.isPaused = true;
+    if (!this.activeTaskId) {
+      this.isProcessing = false;
+    }
   }
 
   resume(): void {
     this.isPaused = false;
+    this.isProcessing = false;
     this.triggerProcessing();
   }
 
@@ -227,6 +231,9 @@ class GenerationQueue {
         }
       }
     }
+    if (!this.activeTaskId) {
+      this.isProcessing = false;
+    }
   }
 
   retryFailed(courseId?: string): void {
@@ -243,11 +250,16 @@ class GenerationQueue {
     if (this.isProcessing || this.isPaused) return;
     this.processNext().catch((err) => {
       console.error('[GenerationQueue Worker Error]', err);
+      this.isProcessing = false;
     });
   }
 
   private async processNext(): Promise<void> {
-    if (this.isPaused) return;
+    if (this.isPaused) {
+      this.isProcessing = false;
+      this.activeTaskId = null;
+      return;
+    }
 
     // Find next pending task
     let nextTask: GenerationTask | null = null;
@@ -355,10 +367,17 @@ class GenerationQueue {
       );
     } finally {
       this.activeTaskId = null;
-      // Small breather between LLM calls to avoid aggressive rate-limits
-      setTimeout(() => {
-        this.processNext().catch(() => {});
-      }, 300);
+      if (this.isPaused) {
+        this.isProcessing = false;
+      } else {
+        // Small breather between LLM calls to avoid aggressive rate-limits
+        setTimeout(() => {
+          this.processNext().catch((err) => {
+            console.error('[GenerationQueue Worker Error]', err);
+            this.isProcessing = false;
+          });
+        }, 300);
+      }
     }
   }
 }

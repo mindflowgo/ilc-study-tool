@@ -1,7 +1,11 @@
+.18db*.bun-build
 .DS_Store
+.freebuff
+.zcode
 .env
 node_modules/
 .svelte-kit/
 app/build/
 data/
 tauri/target/
+tauri/server

@@ -15,9 +15,16 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(400, 'Invalid request: id and content required');
   }
 
-  const success = PromptService.savePrompt(id, content);
-  if (!success) {
-    throw error(500, 'Failed to save prompt');
+  try {
+    const success = PromptService.savePrompt(id, content);
+    if (!success) {
+      throw error(500, 'Failed to save prompt');
+    }
+  } catch (err: any) {
+    if (err?.name === 'PathValidationError') {
+      throw error(400, err.message);
+    }
+    throw err;
   }
 
   return json({ success: true });

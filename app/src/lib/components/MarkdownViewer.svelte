@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Marked } from 'marked';
   import katex from 'katex';
+  import DOMPurify from 'dompurify';
+  import { getApiBaseUrl } from '$lib/api';
 
   interface Props {
     markdown: string;
@@ -100,10 +102,14 @@
     const styleAttr = styleParts.join(' ');
     const showCaption = cleanAlt && !/\.(jpe?g|png|gif|webp|svg)$/i.test(cleanAlt);
 
+    const rawHref = (href || '').trim();
+    const isSafeHref = /^(?:(?:https?|file|asset|tauri):|\/|\.\/|\.\.\/|data:image\/|blob:)/i.test(rawHref);
+    const safeHref = isSafeHref ? rawHref : '';
+
     return `<span class="image-container not-prose my-6 mx-auto block text-center group/img relative select-none">
   <span class="image-inner inline-block relative max-w-full">
     <img
-      src="${href}"
+      src="${escapeHtml(safeHref)}"
       alt="${escapeHtml(cleanAlt)}"
       class="image-resizable rounded-xl border border-stone-200/90 bg-stone-50 shadow-xs hover:shadow-md transition-all duration-200 mx-auto cursor-zoom-in block max-w-full"
       style="${styleAttr}"
@@ -184,17 +190,18 @@
     );
 
     // 3. Rewrite image and document paths to point to API route
+    const apiBase = getApiBaseUrl();
     cleaned = cleaned.replace(
       /(?:src|href)=["'](?:\.\/)?assets\/(.*?)["']/gi,
-      `src="/api/courses/${courseId}/assets/$1"`
+      `src="${apiBase}/api/courses/${courseId}/assets/$1"`
     );
     cleaned = cleaned.replace(
       /!\[(.*?)\]\((?:\.\/)?assets\/(.*?)\)/gi,
-      `![$1](/api/courses/${courseId}/assets/$2)`
+      `![$1](${apiBase}/api/courses/${courseId}/assets/$2)`
     );
     cleaned = cleaned.replace(
       /\[(.*?)\]\((?:\.\/)?assets\/(.*?)\)/gi,
-      `[$1](/api/courses/${courseId}/assets/$2)`
+      `[$1](${apiBase}/api/courses/${courseId}/assets/$2)`
     );
 
     // 4. Process GFM Callouts: > [!NOTE], > [!TIP], > [!IMPORTANT], > [!WARNING], > [!CAUTION]
@@ -226,20 +233,7 @@
         let bodyHtml = markedParser.parse(bodyMarkdown) as string;
 
         // Render KaTeX formulas in body if any
-        bodyHtml = bodyHtml.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
-          try {
-            return katex.renderToString(math.trim(), { displayMode: true });
-          } catch {
-            return `$$${math}$$`;
-          }
-        });
-        bodyHtml = bodyHtml.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
-          try {
-            return katex.renderToString(math.trim(), { displayMode: false });
-          } catch {
-            return `$${math}$`;
-          }
-        });
+        bodyHtml = renderMathInHtml(bodyHtml);
 
         const postItHtml = `
 <div class="postit-container not-prose my-5" data-note-id="${noteId}" data-target="${escapeHtml(targetText)}">
@@ -294,28 +288,102 @@
     let html = markedParser.parse(cleaned) as string;
 
     // 6. Render KaTeX formulas if present
-    html = html.replace(/\$\$([\s\S]+?)\$\$/g, (_, math) => {
-      try {
-        return katex.renderToString(math.trim(), { displayMode: true });
-      } catch {
-        return `$$${math}$$`;
-      }
-    });
-
-    html = html.replace(/\$([^\$\n]+?)\$/g, (_, math) => {
-      try {
-        return katex.renderToString(math.trim(), { displayMode: false });
-      } catch {
-        return `$${math}$`;
-      }
-    });
+    html = renderMathInHtml(html);
 
     // 7. Inject rendered Post-It Notes
     html = html.replace(/<p>\s*%%%USERNOTE_(\d+)%%%\s*<\/p>/g, (_, idx) => userNotes[Number(idx)] || '');
     html = html.replace(/%%%USERNOTE_(\d+)%%%/g, (_, idx) => userNotes[Number(idx)] || '');
 
-    return html;
+    return sanitizeRenderedHtml(html);
   });
+
+  function sanitizeRenderedHtml(dirty: string): string {
+    if (typeof window === 'undefined') return dirty;
+    const purify = typeof DOMPurify.sanitize === 'function' ? DOMPurify : (DOMPurify as any)(window);
+    if (!purify || typeof purify.sanitize !== 'function') return dirty;
+    return purify.sanitize(dirty, {
+      ADD_TAGS: ['details', 'summary', 'mark'],
+      ADD_ATTR: [
+        'target',
+        'data-action',
+        'data-scale',
+        'data-query',
+        'data-target',
+        'data-note-id',
+        'data-anchor-id'
+      ]
+    });
+  }
+
+  function isLikelyLatex(code: string): boolean {
+    const trimmed = code.trim();
+    if (!trimmed) return false;
+
+    // 1. Explicit LaTeX commands: \frac, \sqrt, \alpha, \text, etc.
+    if (/\\[a-zA-Z]+/.test(trimmed)) return true;
+
+    // 2. Math structural notation: power (^), subscript (_), or grouping ({})
+    if (/[\^_{}]/.test(trimmed)) return true;
+
+    // 3. LaTeX escaped symbols or unicode math symbols
+    if (/\\([\\$&#%_{}[\]|<>~^+-/*=])/.test(trimmed)) return true;
+    if (/[≠≈≤≥±×÷·√∞∫∑∏∂∇∈∉⊂⊃∪∩∧∨]/.test(trimmed)) return true;
+
+    // If it has NO LaTeX commands or structural notation:
+    // Any natural language word (3 or more letters, e.g. "Assets", "CAD", "Even", "though") is NOT math
+    if (/[a-zA-Z]{3,}/.test(trimmed)) return false;
+
+    // Multiple words separated by spaces without LaTeX markup -> plain text
+    if (/\b[a-zA-Z]{2,}\s+[a-zA-Z]{2,}\b/.test(trimmed)) return false;
+
+    // Single variable: $x$, $y$, $z$, $n$
+    if (/^[a-zA-Z]$/.test(trimmed)) return true;
+
+    // Short symbolic equation / expression with math operators (no words >= 2 chars):
+    // e.g. "x = 2", "a + b = c", "1 + 1 = 2"
+    if (/[=<>+*]/.test(trimmed) && !/[a-zA-Z]{2,}/.test(trimmed)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function renderMathInHtml(rawHtml: string): string {
+    // Protect pre, code, script, and style blocks from math evaluation
+    const protectedBlocks: string[] = [];
+    const sanitizedHtml = rawHtml.replace(/<(pre|code|script|style)[\s\S]*?<\/\1>/gi, (match) => {
+      protectedBlocks.push(match);
+      return `%%%MATH_PROTECTED_${protectedBlocks.length - 1}%%%`;
+    });
+
+    // 1. Display math: $$...$$
+    let processed = sanitizedHtml.replace(/\$\$([\s\S]+?)\$\$/g, (match, math) => {
+      if (!isLikelyLatex(math)) return match;
+      try {
+        return katex.renderToString(math.trim(), { displayMode: true });
+      } catch {
+        return match;
+      }
+    });
+
+    // 2. Inline math: $...$
+    // Negative lookbehind ensures $ is not preceded by word char or backslash
+    // Negative lookahead ensures $ is not followed by space or digit (currency like $41,500 or $ 50)
+    // Closing $ must not be preceded by space and not followed by digit
+    processed = processed.replace(/(?<![\w\\])\$(?!\s|[0-9])([^\$\n]+?)(?<!\s)\$(?!\d)/g, (match, math) => {
+      if (!isLikelyLatex(math)) return match;
+      try {
+        return katex.renderToString(math.trim(), { displayMode: false });
+      } catch {
+        return match;
+      }
+    });
+
+    // Restore protected blocks
+    processed = processed.replace(/%%%MATH_PROTECTED_(\d+)%%%/g, (_, idx) => protectedBlocks[Number(idx)] || '');
+
+    return processed;
+  }
 
   function highlightTargetInContainer(container: HTMLElement, targetText: string, noteId: string) {
     const cleanTarget = targetText.trim();

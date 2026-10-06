@@ -1,3 +1,5 @@
+import { parseFrontmatter } from './frontmatter';
+
 export interface QuestionOption {
   letter: string;
   text: string;
@@ -23,25 +25,29 @@ export class QuestionParser {
    * Parse standardized KICA markdown into structured Quiz object
    */
   static parseMarkdown(markdown: string): ParsedQuiz {
-    const lines = markdown.split('\n');
+    const { body } = parseFrontmatter(markdown);
+    const lines = body.split('\n');
     let courseCode = '';
     let title = '';
     const questions: QuizQuestion[] = [];
 
-    // 1. Parse header
-    for (let i = 0; i < Math.min(lines.length, 10); i++) {
+    // 1. Parse header from body before ## Questions
+    for (let i = 0; i < Math.min(lines.length, 25); i++) {
       const line = lines[i].trim();
+      if (line.toLowerCase().startsWith('## questions')) {
+        break;
+      }
       if (line.toLowerCase().startsWith('course:')) {
         courseCode = line.replace(/course:\s*/i, '').trim();
-      } else if (line.startsWith('# ')) {
+      } else if (line.startsWith('# ') && !title) {
         title = line.replace(/^#\s+/, '').trim();
       }
     }
 
     // 2. Separate into Questions section and Answers section
-    const answersIndex = markdown.search(/##\s+Answers/i);
-    const questionsText = answersIndex !== -1 ? markdown.substring(0, answersIndex) : markdown;
-    const answersText = answersIndex !== -1 ? markdown.substring(answersIndex) : '';
+    const answersIndex = body.search(/##\s+Answers/i);
+    const questionsText = answersIndex !== -1 ? body.substring(0, answersIndex) : body;
+    const answersText = answersIndex !== -1 ? body.substring(answersIndex) : '';
 
     // 3. Parse Answers map
     const answerMap = new Map<string, { letter: string; explanation: string }>();

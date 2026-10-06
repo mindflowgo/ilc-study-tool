@@ -18,15 +18,35 @@
 
   let isTesting = $state(false);
   let statusMessage = $state<{ success: boolean; text: string } | null>(null);
+  let hasStoredApiKey = $state(false);
 
   $effect(() => {
-    if (isOpen && typeof localStorage !== 'undefined') {
-      provider = localStorage.getItem('ilc_llm_provider') || 'openai_compatible';
-      baseUrl = localStorage.getItem('ilc_llm_baseUrl') || 'http://localhost:11434/v1';
-      apiKey = localStorage.getItem('ilc_llm_apiKey') || '';
-      authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
-      model = localStorage.getItem('ilc_llm_model') ?? '';
-      temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
+    if (isOpen) {
+      // Clean up any legacy API key from localStorage
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('ilc_llm_apiKey');
+      }
+
+      // Load config from server
+      fetch('/api/llm')
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.config) {
+            provider = data.config.provider || 'openai_compatible';
+            baseUrl = data.config.baseUrl || 'http://localhost:11434/v1';
+            model = data.config.model ?? '';
+            authHeaderType = data.config.authHeaderType || 'bearer';
+            temperature = data.config.temperature ?? 0.3;
+            hasStoredApiKey = Boolean(data.config.hasApiKey);
+          } else if (typeof localStorage !== 'undefined') {
+            provider = localStorage.getItem('ilc_llm_provider') || 'openai_compatible';
+            baseUrl = localStorage.getItem('ilc_llm_baseUrl') || 'http://localhost:11434/v1';
+            authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
+            model = localStorage.getItem('ilc_llm_model') ?? '';
+            temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
+          }
+        })
+        .catch(() => {});
     }
   });
 
@@ -35,7 +55,7 @@
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('ilc_llm_provider', provider);
       localStorage.setItem('ilc_llm_baseUrl', baseUrl);
-      localStorage.setItem('ilc_llm_apiKey', apiKey);
+      localStorage.removeItem('ilc_llm_apiKey');
       localStorage.setItem('ilc_llm_authHeaderType', authHeaderType);
       localStorage.setItem('ilc_llm_model', cleanModel);
       localStorage.setItem('ilc_llm_temp', temperature.toString());
@@ -50,7 +70,7 @@
         config: {
           provider,
           baseUrl,
-          apiKey,
+          apiKey: apiKey || undefined,
           authHeaderType,
           model: cleanModel,
           temperature
@@ -167,7 +187,7 @@
               id="modal-api-key"
               type="password"
               bind:value={apiKey}
-              placeholder="sk-..."
+              placeholder={hasStoredApiKey ? 'Key saved on server (leave blank to keep)' : 'sk-...'}
               class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
             />
           </div>

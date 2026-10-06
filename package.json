@@ -9,10 +9,12 @@
     "check": "bun --cwd app check",
     "parse": "bun --cwd app parse",
     "tauri": "bun --cwd tauri dev",
+    "server": "bun run server/index.ts",
+    "server:compile": "bun build --compile --outfile tauri/server server/index.ts",
     "tauri:dev": "bun --cwd app build && bun --cwd tauri dev",
-    "tauri:build": "bun --cwd app build && bun --cwd tauri build",
-    "tauri:build:mac": "bun --cwd app build && bun --cwd tauri build:mac",
-    "tauri:build:win": "bun --cwd app build && bun --cwd tauri build:win"
+    "tauri:build": "bun --cwd app build && bun run server:compile && bun --cwd tauri build",
+    "tauri:build:mac": "bun --cwd app build && bun run server:compile && bun --cwd tauri build:mac",
+    "tauri:build:win": "bun --cwd app build && bun run server:compile && bun --cwd tauri build:win"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.1"

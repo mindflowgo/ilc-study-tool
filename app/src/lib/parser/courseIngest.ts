@@ -5,6 +5,7 @@ import { DomCleaner } from './domCleaner';
 import { TurndownConverter } from './turndownConverter';
 import { QuestionParser } from './questionParser';
 import { serializeWithFrontmatter } from './frontmatter';
+import { optimizeCourseImages } from './imageOptimizer';
 
 export interface CourseManifestLesson {
   id: string; // e.g. "01.02" or "01.06_assign1"
@@ -351,6 +352,20 @@ export class CourseIngest {
 
     if (newLessonsAdded.length > 0) {
       console.log(`✨ Added ${newLessonsAdded.length} new lesson(s) to [${courseId}]:`, newLessonsAdded);
+    }
+
+    // Compress oversized images (>512px) and normalize markdown size specs
+    try {
+      const imageStats = await optimizeCourseImages(courseDir);
+      if (imageStats.converted > 0) {
+        console.log(
+          `🖼️ [${courseId}] Compressed ${imageStats.converted}/${imageStats.scanned} images ` +
+            `(${(imageStats.bytesBefore / 1048576).toFixed(1)}MB → ${(imageStats.bytesAfter / 1048576).toFixed(1)}MB), ` +
+            `${imageStats.markdownRefsUpdated} markdown ref(s) updated`
+        );
+      }
+    } catch (err) {
+      console.warn(`[ImageOptimizer] Failed for ${courseId}, continuing:`, err);
     }
 
     return manifest;

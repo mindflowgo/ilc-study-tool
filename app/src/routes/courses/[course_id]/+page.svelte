@@ -321,12 +321,12 @@
 
   function getLocalLLMConfig() {
     if (typeof localStorage === 'undefined') return undefined;
+    localStorage.removeItem('ilc_llm_apiKey');
     const baseUrl = localStorage.getItem('ilc_llm_baseUrl');
     if (!baseUrl) return undefined;
     return {
       provider: localStorage.getItem('ilc_llm_provider') || 'openai_compatible',
       baseUrl,
-      apiKey: localStorage.getItem('ilc_llm_apiKey') || '',
       authHeaderType: (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer',
       model: (localStorage.getItem('ilc_llm_model') ?? '').trim(),
       temperature: parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3')
@@ -438,7 +438,6 @@
     let provider = '';
     let baseUrl = '';
     let model = '';
-    let apiKey = '';
     let authHeaderType: 'bearer' | 'api_key' | 'both' = 'bearer';
     let temperature = 0.3;
 
@@ -446,7 +445,6 @@
       provider = localStorage.getItem('ilc_llm_provider') || '';
       baseUrl = localStorage.getItem('ilc_llm_baseUrl') || '';
       model = localStorage.getItem('ilc_llm_model') || '';
-      apiKey = localStorage.getItem('ilc_llm_apiKey') || '';
       authHeaderType = (localStorage.getItem('ilc_llm_authHeaderType') as any) || 'bearer';
       temperature = parseFloat(localStorage.getItem('ilc_llm_temp') || '0.3');
     }
@@ -481,7 +479,6 @@
           config: {
             provider,
             baseUrl,
-            apiKey,
             authHeaderType,
             model,
             temperature,
