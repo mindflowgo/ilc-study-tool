@@ -790,65 +790,69 @@
           />
         {/if}
 
-        <!-- Main Card with Sticky Top-Right [Edit] or [Cancel] | [Save] Controls -->
-        <div class="relative bg-white rounded-2xl border border-stone-200 shadow-2xs group">
-          <!-- Top-Right Action Controls (Sticky) -->
-          <div class="sticky top-0 z-30 flex justify-end px-4 sm:px-6 pt-0.5 -mb-[30px] sm:-mb-[34px] pointer-events-none">
-            <div class="pointer-events-auto flex items-center space-x-2">
-              {#if isEditing}
-                <button
-                  onclick={handleCancelEdit}
-                  class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 transition shadow-xs hover:shadow-sm cursor-pointer"
-                  title="Discard changes and exit edit mode (Esc)"
-                >
-                  <X class="w-3.5 h-3.5 text-stone-500" />
-                  <span>Cancel</span>
-                </button>
+        <!-- Top-Right Action Controls (Sticky): direct child of the scroll
+             container. Negative top offsets cancel the container's py padding
+             (p-4 = 16px, sm:p-8 = 32px) so the row pins ~2px below the
+             header line instead of 16-32px down. -->
+        <div class="sticky -top-[14px] sm:-top-[30px] z-30 flex justify-end px-8 sm:px-12 pt-0.5 mt-1 -mb-[30px] pointer-events-none">
+          <div class="pointer-events-auto flex items-center space-x-2">
+            {#if isEditing}
+              <button
+                onclick={handleCancelEdit}
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 transition shadow-xs hover:shadow-sm cursor-pointer"
+                title="Discard changes and exit edit mode (Esc)"
+              >
+                <X class="w-3.5 h-3.5 text-stone-500" />
+                <span>Cancel</span>
+              </button>
 
-                <button
-                  onclick={handleSaveEdit}
-                  disabled={isSaving}
-                  class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900/95 backdrop-blur-sm hover:bg-stone-800 disabled:opacity-50 text-white text-xs font-medium transition shadow-xs hover:shadow-sm cursor-pointer"
-                  title="Save changes to file (⌘+S)"
-                >
-                  {#if isSaving}
-                    <Loader2 class="w-3.5 h-3.5 animate-spin" />
-                    <span>Saving...</span>
-                  {:else if saveSuccessMessage}
-                    <Check class="w-3.5 h-3.5 text-emerald-400" />
-                    <span class="text-emerald-400 font-semibold">{saveSuccessMessage}</span>
-                  {:else}
-                    <Save class="w-3.5 h-3.5" />
-                    <span>Save</span>
-                  {/if}
-                </button>
-              {:else}
-                <button
-                  onclick={handleExportPDF}
-                  disabled={isExportingPdf}
-                  class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer disabled:opacity-50"
-                  title="Generate and download PDF for this document"
-                >
-                  {#if isExportingPdf}
-                    <Loader2 class="w-3.5 h-3.5 animate-spin text-stone-500" />
-                    <span>PDF...</span>
-                  {:else}
-                    <FileDown class="w-3.5 h-3.5 text-stone-500" />
-                    <span>PDF</span>
-                  {/if}
-                </button>
+              <button
+                onclick={handleSaveEdit}
+                disabled={isSaving}
+                class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900/95 backdrop-blur-sm hover:bg-stone-800 disabled:opacity-50 text-white text-xs font-medium transition shadow-xs hover:shadow-sm cursor-pointer"
+                title="Save changes to file (⌘+S)"
+              >
+                {#if isSaving}
+                  <Loader2 class="w-3.5 h-3.5 animate-spin" />
+                  <span>Saving...</span>
+                {:else if saveSuccessMessage}
+                  <Check class="w-3.5 h-3.5 text-emerald-400" />
+                  <span class="text-emerald-400 font-semibold">{saveSuccessMessage}</span>
+                {:else}
+                  <Save class="w-3.5 h-3.5" />
+                  <span>Save</span>
+                {/if}
+              </button>
+            {:else}
+              <button
+                onclick={handleExportPDF}
+                disabled={isExportingPdf}
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer disabled:opacity-50"
+                title="Generate and download PDF for this document"
+              >
+                {#if isExportingPdf}
+                  <Loader2 class="w-3.5 h-3.5 animate-spin text-stone-500" />
+                  <span>PDF...</span>
+                {:else}
+                  <FileDown class="w-3.5 h-3.5 text-stone-500" />
+                  <span>PDF</span>
+                {/if}
+              </button>
 
-                <button
-                  onclick={() => (isEditing = true)}
-                  class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer"
-                  title="Edit content"
-                >
-                  <Edit3 class="w-3.5 h-3.5 text-stone-500" />
-                  <span>Edit</span>
-                </button>
-              {/if}
-            </div>
+              <button
+                onclick={() => (isEditing = true)}
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer"
+                title="Edit content"
+              >
+                <Edit3 class="w-3.5 h-3.5 text-stone-500" />
+                <span>Edit</span>
+              </button>
+            {/if}
           </div>
+        </div>
+
+        <!-- Main Card -->
+        <div class="relative bg-white rounded-2xl border border-stone-200 shadow-2xs group">
 
           {#if isEditing}
             <!-- CodeMirror Editor (direct raw markdown with YAML frontmatter) -->
