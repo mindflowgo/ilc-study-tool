@@ -69,6 +69,9 @@ try {
   server = Bun.serve({
     hostname: '127.0.0.1',
     port: PORT,
+    // Backups embed the original _backup/*.zip packages and can be several
+    // hundred MB; Bun's 128MB default body limit would 413 them.
+    maxRequestBodySize: 1024 * 1024 * 1024,
     async fetch(req: Request) {
       const url = new URL(req.url);
 

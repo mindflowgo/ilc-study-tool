@@ -9,35 +9,25 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { PNG } from 'pngjs';
-import jpeg from 'jpeg-js';
+import { makePng, imageSize } from './test-image';
 
 const PORT = 3199;
 const BASE = `http://127.0.0.1:${PORT}`;
 const SCRATCH = fs.mkdtempSync('/tmp/ilc-contract-');
 fs.mkdirSync(path.join(SCRATCH, 'courses'), { recursive: true });
 
-// Synthetic course with one oversized PNG so compression runs end-to-end
-// through the compiled/bundled codec path.
-{
+// Synthetic course with one oversized PNG (8:6 aspect) so compression runs
+// end-to-end through the compiled/bundled codec path. Images are synthesized
+// with Bun.Image — no pngjs/jpeg-js dependencies needed.
+await (async () => {
   const courseDir = path.join(SCRATCH, 'courses', 'tst01');
   fs.mkdirSync(path.join(courseDir, 'assets', 'img'), { recursive: true });
-  const png = new PNG({ width: 900, height: 640 });
-  for (let y = 0; y < png.height; y++) {
-    for (let x = 0; x < png.width; x++) {
-      const idx = (png.width * y + x) << 2;
-      png.data[idx] = (x * 255) / png.width;
-      png.data[idx + 1] = (y * 255) / png.height;
-      png.data[idx + 2] = 128;
-      png.data[idx + 3] = 255;
-    }
-  }
-  fs.writeFileSync(path.join(courseDir, 'assets', 'img', 'big_diagram.png'), PNG.sync.write(png));
+  fs.writeFileSync(path.join(courseDir, 'assets', 'img', 'big_diagram.png'), await makePng(900));
   fs.writeFileSync(
     path.join(courseDir, '01.01.lesson.md'),
     '# Lesson\n\n![Big diagram](./assets/img/big_diagram.png)\n'
   );
-}
+})();
 
 let failures = 0;
 
@@ -207,17 +197,7 @@ try {
     // Re-seed a fresh oversized PNG (an earlier all-courses compress call may
     // have already consumed the one created at boot).
     const courseDir = path.join(SCRATCH, 'courses', 'tst01');
-    const png = new PNG({ width: 900, height: 640 });
-    for (let y = 0; y < png.height; y++) {
-      for (let x = 0; x < png.width; x++) {
-        const idx = (png.width * y + x) << 2;
-        png.data[idx] = (x * 255) / png.width;
-        png.data[idx + 1] = (y * 255) / png.height;
-        png.data[idx + 2] = 128;
-        png.data[idx + 3] = 255;
-      }
-    }
-    fs.writeFileSync(path.join(courseDir, 'assets', 'img', 'big_diagram.png'), PNG.sync.write(png));
+    fs.writeFileSync(path.join(courseDir, 'assets', 'img', 'big_diagram.png'), await makePng(900));
 
     const res = await req('/api/maintenance/compress-images', {
       method: 'POST',
@@ -231,8 +211,8 @@ try {
     const pngGone = !fs.existsSync(path.join(courseDir, 'assets', 'img', 'big_diagram.png'));
     check('original PNG removed, JPEG present', pngGone && fs.existsSync(jpgPath));
 
-    const decoded = jpeg.decode(fs.readFileSync(jpgPath), { useTArray: true, formatAsRGBA: true });
-    check('JPEG clamped to 512px width', decoded.width === 512 && decoded.height === 364);
+    const dims = await imageSize(fs.readFileSync(jpgPath));
+    check('JPEG clamped to 512px width', dims.width === 512 && dims.height === 384);
 
     const md = fs.readFileSync(path.join(courseDir, '01.01.lesson.md'), 'utf8');
     check(

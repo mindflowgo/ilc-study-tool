@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { zipSync } from 'fflate';
-import { PNG } from 'pngjs';
+import { makePng } from './test-image';
 
 const PORT = 3194;
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -24,15 +24,10 @@ const check = (label: string, ok: boolean, detail = ''): void => {
 
 // Craft a lesson package zip (fflate — same codec the extractor uses)
 const html = `<html><body><section id="ilc_mindsOn"><h1>Learning activity 1.1</h1><div class="ilcLearningGoals">Goals here</div><img src="img/pic.png"></section></body></html>`;
-const png = new PNG({ width: 40, height: 30 });
-for (let i = 0; i < png.data.length; i += 4) {
-  png.data[i] = 200;
-  png.data[i + 3] = 255;
-}
 const zipBytes = zipSync(
   {
     'gwl3o_u1la1.html': new TextEncoder().encode(html),
-    'img/pic.png': PNG.sync.write(png)
+    'img/pic.png': await makePng(40) // 8:6 aspect → 40x30
   },
   { level: 6 }
 );

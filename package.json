@@ -21,11 +21,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.1",
     "@types/bun": "^1.4.2",
-    "@types/jpeg-js": "^0.3.7",
-    "@types/pngjs": "^6.0.5",
     "fflate": "^0.8.3",
-    "jpeg-js": "^0.4.4",
-    "pngjs": "^7.0.0",
     "typescript": "^7.0.2"
   }
 }
