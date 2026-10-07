@@ -47,10 +47,10 @@
 
 <div class="h-full flex flex-col">
   <!-- Quiz Header -->
-  <div class="flex items-center justify-between pb-4 mb-4 border-b border-stone-200 pr-48 sm:pr-56">
+  <div class="flex items-center justify-between pb-4 mb-4 border-b border-stone-200 dark:border-stone-800 pr-48 sm:pr-56">
     <div>
-      <h2 class="text-base font-semibold text-stone-900">{parsedQuiz.title}</h2>
-      <p class="text-xs text-stone-500">
+      <h2 class="text-base font-semibold text-stone-900 dark:text-stone-100">{parsedQuiz.title}</h2>
+      <p class="text-xs text-stone-500 dark:text-stone-400">
         Ontario Curriculum KICA Practice Test • {totalQuestions} Questions
       </p>
     </div>
@@ -59,9 +59,9 @@
     <div class="flex-1 overflow-y-auto space-y-6 pr-2">
       <!-- Score Banner when Submitted -->
       {#if submitted}
-        <div class="p-4 rounded-xl border {percentage >= 75 ? 'border-emerald-200 bg-emerald-50/70 text-emerald-900' : percentage >= 50 ? 'border-amber-200 bg-amber-50/70 text-amber-900' : 'border-rose-200 bg-rose-50/70 text-rose-900'} flex items-center justify-between">
+        <div class="p-4 rounded-xl border {percentage >= 75 ? 'border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200' : percentage >= 50 ? 'border-amber-200 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200' : 'border-rose-200 dark:border-rose-800/60 bg-rose-50/70 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200'} flex items-center justify-between">
           <div class="flex items-center space-x-3">
-            <div class="p-2 rounded-lg {percentage >= 75 ? 'bg-emerald-100 text-emerald-700' : percentage >= 50 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}">
+            <div class="p-2 rounded-lg {percentage >= 75 ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300' : percentage >= 50 ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300' : 'bg-rose-100 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300'}">
               <Award class="w-6 h-6" />
             </div>
             <div>
@@ -82,7 +82,7 @@
 
           <button
             onclick={resetQuiz}
-            class="flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-stone-300 bg-white text-stone-800 text-xs font-medium hover:bg-stone-50 transition shadow-2xs"
+            class="flex items-center space-x-1 px-3 py-1.5 rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-800 dark:text-stone-200 text-xs font-medium hover:bg-stone-50 dark:hover:bg-stone-700 transition shadow-2xs cursor-pointer"
           >
             <RotateCcw class="w-3.5 h-3.5" />
             <span>Retake Quiz</span>
@@ -95,21 +95,21 @@
         {@const userPick = userAnswers[q.number]}
         {@const isCorrect = userPick === q.correctAnswer}
 
-        <div class="rounded-xl border border-stone-200 bg-white p-5 shadow-2xs space-y-4">
+        <div class="rounded-xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-5 shadow-2xs space-y-4">
           <!-- Question Header -->
           <div class="flex items-start justify-between">
             <div class="space-y-1">
               <div class="flex items-center space-x-2">
-                <span class="text-xs font-mono font-bold text-stone-400">
+                <span class="text-xs font-mono font-bold text-stone-400 dark:text-stone-500">
                   Q{q.number}
                 </span>
                 {#if q.category}
-                  <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-stone-100 text-stone-600 border border-stone-200">
+                  <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-700">
                     {q.category}
                   </span>
                 {/if}
               </div>
-              <h3 class="text-sm font-medium text-stone-900 leading-snug">
+              <h3 class="text-sm font-medium text-stone-900 dark:text-stone-100 leading-snug">
                 {q.prompt}
               </h3>
             </div>
@@ -117,12 +117,12 @@
             {#if submitted}
               <div class="shrink-0 ml-3">
                 {#if isCorrect}
-                  <div class="flex items-center space-x-1 text-emerald-600 text-xs font-semibold">
+                  <div class="flex items-center space-x-1 text-emerald-600 dark:text-emerald-400 text-xs font-semibold">
                     <CheckCircle2 class="w-5 h-5" />
                     <span>Correct</span>
                   </div>
                 {:else}
-                  <div class="flex items-center space-x-1 text-rose-600 text-xs font-semibold">
+                  <div class="flex items-center space-x-1 text-rose-600 dark:text-rose-400 text-xs font-semibold">
                     <XCircle class="w-5 h-5" />
                     <span>Incorrect</span>
                   </div>
@@ -140,16 +140,16 @@
               <button
                 onclick={() => selectOption(q.number, opt.letter)}
                 disabled={submitted}
-                class="w-full text-left p-3 rounded-lg border text-xs flex items-start space-x-3 transition {
+                class="w-full text-left p-3 rounded-lg border text-xs flex items-start space-x-3 transition cursor-pointer {
                   submitted
                     ? isOptionCorrect
-                      ? 'border-emerald-500 bg-emerald-50/50 font-medium text-stone-900'
+                      ? 'border-emerald-500 dark:border-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/40 font-medium text-stone-900 dark:text-stone-100'
                       : isSelected
-                        ? 'border-rose-300 bg-rose-50/50 text-stone-700'
-                        : 'border-stone-100 opacity-60 text-stone-600'
+                        ? 'border-rose-300 dark:border-rose-800 bg-rose-50/50 dark:bg-rose-950/40 text-stone-700 dark:text-stone-300'
+                        : 'border-stone-100 dark:border-stone-800 opacity-60 text-stone-600 dark:text-stone-400'
                     : isSelected
-                      ? 'border-stone-900 bg-stone-900/5 text-stone-900 font-medium'
-                      : 'border-stone-200 hover:border-stone-300 hover:bg-stone-50 text-stone-700'
+                      ? 'border-stone-900 dark:border-stone-100 bg-stone-900/5 dark:bg-white/10 text-stone-900 dark:text-stone-100 font-medium'
+                      : 'border-stone-200 dark:border-stone-800 hover:border-stone-300 dark:hover:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800/50 text-stone-700 dark:text-stone-300'
                 }"
               >
                 <div class="w-5 h-5 rounded-full flex items-center justify-center font-mono text-[11px] shrink-0 font-medium {
@@ -158,10 +158,10 @@
                       ? 'bg-emerald-600 text-white'
                       : isSelected
                         ? 'bg-rose-500 text-white'
-                        : 'border border-stone-200 text-stone-500'
+                        : 'border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400'
                     : isSelected
-                      ? 'bg-stone-900 text-white'
-                      : 'border border-stone-300 text-stone-500'
+                      ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900'
+                      : 'border border-stone-300 dark:border-stone-700 text-stone-500 dark:text-stone-400'
                 }">
                   {opt.letter}
                 </div>
@@ -174,10 +174,10 @@
 
           <!-- Explanation after submit -->
           {#if submitted && q.explanation}
-            <div class="mt-3 p-3 rounded-lg bg-stone-50 border border-stone-200 text-xs text-stone-700 flex items-start space-x-2">
-              <HelpCircle class="w-4 h-4 text-stone-400 shrink-0 mt-0.5" />
+            <div class="mt-3 p-3 rounded-lg bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-800 text-xs text-stone-700 dark:text-stone-300 flex items-start space-x-2">
+              <HelpCircle class="w-4 h-4 text-stone-400 dark:text-stone-500 shrink-0 mt-0.5" />
               <div>
-                <span class="font-semibold text-stone-900">Explanation:</span>
+                <span class="font-semibold text-stone-900 dark:text-stone-100">Explanation:</span>
                 <span class="ml-1 leading-relaxed">{q.explanation}</span>
               </div>
             </div>
@@ -188,13 +188,13 @@
       <!-- Submit / Action Footer -->
       <div class="pt-4 pb-8 flex items-center justify-between">
         {#if !submitted}
-          <div class="text-xs text-stone-500">
+          <div class="text-xs text-stone-500 dark:text-stone-400">
             {Object.keys(userAnswers).length} of {totalQuestions} answered
           </div>
           <button
             onclick={submitQuiz}
             disabled={Object.keys(userAnswers).length === 0}
-            class="px-5 py-2 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+            class="px-5 py-2 rounded-lg bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-medium hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm cursor-pointer"
           >
             Submit Practice Test
           </button>
@@ -202,7 +202,7 @@
           <div></div>
           <button
             onclick={resetQuiz}
-            class="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 transition shadow-sm"
+            class="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-medium hover:bg-stone-800 dark:hover:bg-stone-200 transition shadow-sm cursor-pointer"
           >
             <RotateCcw class="w-3.5 h-3.5" />
             <span>Retake Test</span>

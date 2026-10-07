@@ -29,7 +29,7 @@ export function initApiInterceptor(): void {
 
   interceptorInitialized = true;
   const originalFetch = window.fetch;
-  window.fetch = function (input: RequestInfo | URL, init?: RequestInit) {
+  window.fetch = (function (input: RequestInfo | URL, init?: RequestInit) {
     if (typeof input === 'string') {
       if (input.startsWith('/api/')) {
         input = `${baseUrl}${input}`;
@@ -39,6 +39,6 @@ export function initApiInterceptor(): void {
         input = new URL(`${baseUrl}${input.pathname}${input.search}`);
       }
     }
-    return originalFetch.call(this, input, init);
-  };
+    return originalFetch(input, init);
+  }) as any;
 }

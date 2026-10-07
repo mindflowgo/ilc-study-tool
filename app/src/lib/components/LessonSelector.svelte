@@ -71,7 +71,7 @@
     onclick={prevLesson}
     disabled={!hasPrev}
     title="Previous lesson"
-    class="p-1.5 rounded border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 transition"
+    class="p-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 dark:text-stone-300 transition"
   >
     <ChevronLeft class="w-4 h-4" />
   </button>
@@ -80,17 +80,17 @@
   <div class="relative">
     <button
       onclick={toggleDropdown}
-      class="flex items-center space-x-2 px-3 py-1.5 rounded border border-stone-200 bg-white hover:bg-stone-50 text-stone-800 font-medium transition shadow-2xs max-w-[280px] sm:max-w-md"
+      class="flex items-center space-x-2 px-3 py-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-100 font-medium transition shadow-2xs max-w-[280px] sm:max-w-md"
     >
       {#if currentLesson?.type === 'assignment'}
-        <Bookmark class="w-3.5 h-3.5 text-purple-600 shrink-0" />
+        <Bookmark class="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
       {:else}
-        <FileText class="w-3.5 h-3.5 text-stone-500 shrink-0" />
+        <FileText class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400 shrink-0" />
       {/if}
       <span class="truncate">
         {currentLesson ? currentLesson.title : 'Select a lesson'}
       </span>
-      <ChevronDown class="w-3.5 h-3.5 text-stone-400 shrink-0 ml-1" />
+      <ChevronDown class="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 shrink-0 ml-1" />
     </button>
 
     <!-- Dropdown Menu -->
@@ -101,23 +101,23 @@
         role="presentation"
       ></div>
 
-      <div class="absolute left-0 mt-1 w-80 sm:w-96 rounded-lg border border-stone-200 bg-white shadow-xl z-40 overflow-hidden flex flex-col max-h-[480px]">
+      <div class="absolute left-0 mt-1 w-80 sm:w-96 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl z-40 overflow-hidden flex flex-col max-h-[480px]">
         <!-- Search bar -->
-        <div class="p-2 border-b border-stone-100 bg-stone-50/50 flex items-center space-x-2">
-          <Search class="w-3.5 h-3.5 text-stone-400 shrink-0" />
+        <div class="p-2 border-b border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-850/50 flex items-center space-x-2">
+          <Search class="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 shrink-0" />
           <input
             type="text"
             bind:value={searchQuery}
             placeholder="Search lessons..."
-            class="w-full bg-transparent text-xs text-stone-800 placeholder-stone-400 focus:outline-none"
+            class="w-full bg-transparent text-xs text-stone-800 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none"
           />
         </div>
 
         <!-- Lessons list by Unit -->
-        <div class="overflow-y-auto divide-y divide-stone-100 p-1">
+        <div class="overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800/60 p-1">
           {#each filteredUnits as unit}
             <div class="py-1">
-              <div class="px-2 py-1 text-[11px] font-semibold text-stone-400 uppercase tracking-wider">
+              <div class="px-2 py-1 text-[11px] font-semibold text-stone-400 dark:text-stone-500 uppercase tracking-wider">
                 Unit {unit.number}: {unit.title}
               </div>
               <div class="space-y-0.5">
@@ -125,11 +125,11 @@
                   {@const isSelected = lesson.id === selectedLessonId}
                   <button
                     onclick={() => selectAndClose(lesson.id)}
-                    class="w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition {isSelected ? 'bg-stone-900 text-white font-medium' : 'text-stone-700 hover:bg-stone-100'}"
+                    class="w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition {isSelected ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 font-medium' : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}"
                   >
                     <div class="flex items-center space-x-2 truncate pr-2">
                       {#if lesson.type === 'assignment'}
-                        <span class="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase {isSelected ? 'bg-purple-800 text-purple-200' : 'bg-purple-100 text-purple-700'}">
+                        <span class="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase {isSelected ? 'bg-purple-800 text-purple-200 dark:bg-purple-300 dark:text-purple-950' : 'bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300'}">
                           Assign
                         </span>
                       {:else}
@@ -147,7 +147,7 @@
               </div>
             </div>
           {:else}
-            <div class="p-4 text-center text-xs text-stone-400">
+            <div class="p-4 text-center text-xs text-stone-400 dark:text-stone-500">
               No lessons match your search.
             </div>
           {/each}
@@ -161,7 +161,7 @@
     onclick={nextLesson}
     disabled={!hasNext}
     title="Next lesson"
-    class="p-1.5 rounded border border-stone-200 bg-white hover:bg-stone-50 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 transition"
+    class="p-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 dark:text-stone-300 transition"
   >
     <ChevronRight class="w-4 h-4" />
   </button>

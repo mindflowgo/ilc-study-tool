@@ -1,7 +1,6 @@
 import TurndownService from 'turndown';
 // @ts-ignore
 import { gfm } from 'turndown-plugin-gfm';
-import yaml from 'js-yaml';
 
 export interface LessonFrontmatter {
   title: string;
@@ -87,7 +86,7 @@ export class TurndownConverter {
     const cleanedMd = mdBody.replace(/\n{4,}/g, '\n\n');
 
     // Create YAML frontmatter
-    const yamlHeader = `---\n${yaml.dump(frontmatter, { lineWidth: -1 })}---\n\n`;
+    const yamlHeader = `---\n${(globalThis as any).Bun.YAML.stringify(frontmatter)}---\n\n`;
 
     return yamlHeader + cleanedMd;
   }

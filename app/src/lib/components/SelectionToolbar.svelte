@@ -133,36 +133,36 @@
 
 <!-- AI Annotation Prompt Popover Modal -->
 {#if isPromptOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs animate-in fade-in duration-150">
-    <div class="bg-white rounded-2xl border border-stone-200 shadow-2xl max-w-lg w-full p-5 space-y-4 animate-in zoom-in-95 duration-150">
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 dark:bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div class="bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xl max-w-lg w-full p-5 space-y-4 animate-in zoom-in-95 duration-150">
       <!-- Header -->
-      <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+      <div class="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3">
         <div class="flex items-center space-x-2">
-          <div class="p-1.5 rounded-lg bg-stone-900 text-white">
+          <div class="p-1.5 rounded-lg bg-stone-900 dark:bg-stone-800 text-white dark:text-stone-200">
             <Sparkles class="w-4 h-4 text-amber-400" />
           </div>
           <div>
-            <h3 class="text-sm font-semibold text-stone-900">Add AI Post-It Note</h3>
-            <p class="text-[11px] text-stone-500">Ask a question or request explanation for this excerpt</p>
+            <h3 class="text-sm font-semibold text-stone-900 dark:text-stone-100">Add AI Post-It Note</h3>
+            <p class="text-[11px] text-stone-500 dark:text-stone-400">Ask a question or request explanation for this excerpt</p>
           </div>
         </div>
 
         <button
           onclick={handleClosePrompt}
-          class="p-1 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition"
+          class="p-1 rounded-md text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition cursor-pointer"
         >
           <X class="w-4 h-4" />
         </button>
       </div>
 
       <!-- Selected Excerpt Quote Preview -->
-      <div class="p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs text-stone-700 italic max-h-24 overflow-y-auto leading-relaxed border-l-3 border-l-amber-500">
+      <div class="p-3 rounded-xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700/60 text-xs text-stone-700 dark:text-stone-300 italic max-h-24 overflow-y-auto leading-relaxed border-l-3 border-l-amber-500">
         "{selectedText}"
       </div>
 
       <!-- Quick Prompt Chips -->
       <div class="space-y-1.5">
-        <div class="text-[11px] font-medium text-stone-500 uppercase tracking-wider">
+        <div class="text-[11px] font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider">
           Quick Questions
         </div>
         <div class="flex flex-wrap gap-1.5">
@@ -170,7 +170,7 @@
             <button
               onclick={() => handleSelectChip(chip.prompt)}
               disabled={isGenerating}
-              class="px-2.5 py-1 rounded-lg border border-stone-200 hover:border-stone-400 hover:bg-stone-50 text-[11px] text-stone-700 font-medium transition cursor-pointer disabled:opacity-50"
+              class="px-2.5 py-1 rounded-lg border border-stone-200 dark:border-stone-700 hover:border-stone-400 dark:hover:border-stone-500 hover:bg-stone-50 dark:hover:bg-stone-800 bg-white dark:bg-stone-800/50 text-[11px] text-stone-700 dark:text-stone-300 font-medium transition cursor-pointer disabled:opacity-50"
             >
               {chip.label}
             </button>
@@ -180,7 +180,7 @@
 
       <!-- Custom Query Textarea -->
       <div class="space-y-1">
-        <label for="annotation-query-input" class="text-[11px] font-medium text-stone-500 uppercase tracking-wider">
+        <label for="annotation-query-input" class="text-[11px] font-medium text-stone-500 dark:text-stone-400 uppercase tracking-wider">
           Custom Question
         </label>
         <textarea
@@ -188,15 +188,15 @@
           bind:value={userQuery}
           rows="3"
           placeholder="e.g. Why is this precedent critical in Canadian constitutional law?"
-          class="w-full p-2.5 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900 resize-none"
+          class="w-full p-2.5 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-950 text-xs text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100 resize-none"
         ></textarea>
       </div>
 
       <!-- Actions -->
-      <div class="flex items-center justify-between pt-2 border-t border-stone-100">
+      <div class="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-stone-800">
         <button
           onclick={handleClosePrompt}
-          class="px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:bg-stone-100 transition"
+          class="px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition cursor-pointer"
         >
           Cancel
         </button>
@@ -204,7 +204,7 @@
         <button
           onclick={() => handleSend()}
           disabled={isGenerating || !userQuery.trim()}
-          class="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-stone-900 hover:bg-stone-800 disabled:opacity-50 text-white text-xs font-medium transition shadow-2xs cursor-pointer"
+          class="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-stone-900 dark:bg-stone-100 hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-50 text-white dark:text-stone-900 text-xs font-medium transition shadow-2xs cursor-pointer"
         >
           {#if isGenerating}
             <Loader2 class="w-3.5 h-3.5 animate-spin" />

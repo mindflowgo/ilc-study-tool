@@ -1,9 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import sharp from 'sharp';
 
 /**
- * Course image optimizer (server-side).
+ * Course image optimizer (server-side, Bun runtime).
  *
  * - Clamps any raster image wider than MAX_IMAGE_WIDTH to that width
  *   (aspect preserved) and re-encodes it as JPEG.
@@ -11,6 +10,8 @@ import sharp from 'sharp';
  *   `|50%` size spec to images that would otherwise display wider than
  *   half of the reading column.
  *
+ * Uses Bun.Image — a runtime builtin — so the compiled sidecar binary
+ * (`bun build --compile`) stays self-contained with zero native deps.
  * Runs as part of CourseIngest (every import/re-parse) and via the
  * maintenance endpoint / CLI script for already-imported courses.
  */
@@ -24,6 +25,24 @@ export const MAX_DISPLAY_FRACTION = 0.5;
 
 const RASTER_RE = /\.(jpe?g|png)$/i;
 const CONCURRENCY = 8;
+
+// Minimal structural types so both the root (bun) and app tsconfigs check
+// cleanly without requiring @types/bun in the app package.
+interface BunImageInstance {
+  metadata(): Promise<{ width: number; height: number; format?: string }>;
+  resize(width: number): BunImageInstance;
+  jpeg(options?: { quality?: number; progressive?: boolean }): BunImageInstance;
+  buffer(): Promise<Buffer>;
+}
+type BunImageConstructor = new (input: Buffer | Uint8Array | ArrayBuffer | string) => BunImageInstance;
+
+function getImageCtor(): BunImageConstructor {
+  const ctor = (globalThis as { Bun?: { Image?: BunImageConstructor } }).Bun?.Image;
+  if (!ctor) {
+    throw new Error('Bun.Image is unavailable (requires Bun >= 1.3.14)');
+  }
+  return ctor;
+}
 
 export interface ImageOptimizeSummary {
   scanned: number;
@@ -39,8 +58,6 @@ interface Conversion {
   /** assets-relative key, e.g. 'img/foo.png' */
   from: string;
   to: string;
-  bytesBefore: number;
-  bytesAfter: number;
   samePath: boolean;
 }
 
@@ -160,6 +177,7 @@ export async function optimizeCourseImages(courseDir: string): Promise<ImageOpti
   const imgDir = path.join(courseDir, 'assets', 'img');
   if (!fs.existsSync(imgDir)) return summary;
 
+  const Image = getImageCtor();
   const files = fs.readdirSync(imgDir).filter((f) => RASTER_RE.test(f) && !f.startsWith('.'));
   summary.scanned = files.length;
 
@@ -172,15 +190,20 @@ export async function optimizeCourseImages(courseDir: string): Promise<ImageOpti
     const filePath = path.join(imgDir, file);
     try {
       const bytesBefore = fs.statSync(filePath).size;
-      const meta = await sharp(filePath).metadata();
-      const width = meta.width ?? 0;
+      const img = new Image(fs.readFileSync(filePath));
+      const meta = await img.metadata();
+      if (!meta.width || !meta.height) return;
 
-      if (width > 0 && width <= MAX_IMAGE_WIDTH) {
-        widths.set(`img/${file}`.toLowerCase(), width);
+      if (meta.width <= MAX_IMAGE_WIDTH) {
+        widths.set(`img/${file}`.toLowerCase(), meta.width);
         summary.skippedSmall++;
         return;
       }
-      if (!width) return;
+
+      const output = await img
+        .resize(MAX_IMAGE_WIDTH)
+        .jpeg({ quality: JPEG_QUALITY, progressive: true })
+        .buffer();
 
       // Target name: same basename with .jpg extension, avoiding collisions
       const base = file.replace(/\.[^.]+$/, '');
@@ -188,17 +211,10 @@ export async function optimizeCourseImages(courseDir: string): Promise<ImageOpti
       for (let n = 2; fs.existsSync(path.join(imgDir, target)) && target !== file; n++) {
         target = `${base}-${n}.jpg`;
       }
-      const targetPath = path.join(imgDir, target);
       const samePath = target === file;
 
-      const output = await sharp(filePath)
-        .resize({ width: MAX_IMAGE_WIDTH, withoutEnlargement: true })
-        .flatten({ background: '#ffffff' })
-        .jpeg({ quality: JPEG_QUALITY, mozjpeg: true })
-        .toBuffer();
-
-      fs.writeFileSync(targetPath, output);
-      widths.set(`img/${target}`.toLowerCase(), Math.min(width, MAX_IMAGE_WIDTH));
+      fs.writeFileSync(path.join(imgDir, target), output);
+      widths.set(`img/${target}`.toLowerCase(), Math.min(meta.width, MAX_IMAGE_WIDTH));
 
       summary.converted++;
       summary.bytesBefore += bytesBefore;
@@ -207,9 +223,9 @@ export async function optimizeCourseImages(courseDir: string): Promise<ImageOpti
       const fromKey = `img/${file}`.toLowerCase();
       if (!samePath) {
         renameMap.set(fromKey, `img/${target}`);
-        conversions.push({ from: fromKey, to: `img/${target}`, bytesBefore, bytesAfter: output.length, samePath: false });
+        conversions.push({ from: fromKey, to: `img/${target}`, samePath: false });
       } else {
-        conversions.push({ from: fromKey, to: fromKey, bytesBefore, bytesAfter: output.length, samePath: true });
+        conversions.push({ from: fromKey, to: fromKey, samePath: true });
       }
     } catch (err) {
       console.warn(`[ImageOptimizer] Skipping ${file}:`, err instanceof Error ? err.message : err);

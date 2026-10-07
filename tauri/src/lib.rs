@@ -182,6 +182,8 @@ fn open_course_folder(app: tauri::AppHandle, course_id: String, path: Option<Str
 
 struct BackendProcess(std::sync::Mutex<Option<std::process::Child>>);
 
+const BACKEND_PORT: u16 = 3182;
+
 fn get_default_data_dir(app: &tauri::App) -> PathBuf {
     if let Ok(cwd) = std::env::current_dir() {
         if cwd.join("data").exists() {
@@ -194,6 +196,52 @@ fn get_default_data_dir(app: &tauri::App) -> PathBuf {
         .app_data_dir()
         .map(|d| d.join("data"))
         .unwrap_or_else(|_| PathBuf::from("./data"))
+}
+
+/// All sidecar stdout/stderr lands in `<data_dir>/backend.log` so packaged
+/// builds leave a diagnosable trail instead of dropping output on the floor.
+fn backend_log_file(data_dir: &Path) -> Option<std::fs::File> {
+    let _ = std::fs::create_dir_all(data_dir);
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(data_dir.join("backend.log"))
+        .ok()
+}
+
+fn log_backend_line(data_dir: &Path, message: &str) {
+    use std::io::Write;
+    if let Some(mut file) = backend_log_file(data_dir) {
+        let _ = writeln!(file, "[{}] {}", chrono_like_timestamp(), message);
+    }
+}
+
+/// RFC-3339-ish local timestamp without pulling in a chrono dependency.
+fn chrono_like_timestamp() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    format!("unix:{secs}")
+}
+
+/// Candidate filenames for the compiled Bun sidecar, per platform.
+/// `bun build --compile` emits `server` on unix and `server.exe` on Windows.
+fn backend_binary_names() -> Vec<&'static str> {
+    if cfg!(target_os = "windows") {
+        vec![
+            "server.exe",
+            "bin/server.exe",
+            "server-x86_64-pc-windows-msvc.exe",
+        ]
+    } else {
+        vec![
+            "server",
+            "bin/server",
+            "server-x86_64-apple-darwin",
+            "server-aarch64-apple-darwin",
+        ]
+    }
 }
 
 fn start_backend_process(app: &tauri::App) -> Option<std::process::Child> {
@@ -213,15 +261,10 @@ fn start_backend_process(app: &tauri::App) -> Option<std::process::Child> {
 
     // 1. Check for bundled binary in resource dir
     if let Ok(res_dir) = app.path().resource_dir() {
-        let binary_candidates = [
-            res_dir.join("server"),
-            res_dir.join("bin").join("server"),
-            res_dir.join("server-x86_64-apple-darwin"),
-            res_dir.join("server-aarch64-apple-darwin"),
-        ];
-        for b in binary_candidates {
-            if b.exists() {
-                cmd = Some(Command::new(b));
+        for name in backend_binary_names() {
+            let candidate = res_dir.join(name);
+            if candidate.exists() {
+                cmd = Some(Command::new(candidate));
                 break;
             }
         }
@@ -231,14 +274,10 @@ fn start_backend_process(app: &tauri::App) -> Option<std::process::Child> {
     if cmd.is_none() {
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_dir) = exe_path.parent() {
-                let binary_candidates = [
-                    exe_dir.join("server"),
-                    exe_dir.join("server-x86_64-apple-darwin"),
-                    exe_dir.join("server-aarch64-apple-darwin"),
-                ];
-                for b in binary_candidates {
-                    if b.exists() {
-                        cmd = Some(Command::new(b));
+                for name in backend_binary_names() {
+                    let candidate = exe_dir.join(name);
+                    if candidate.exists() {
+                        cmd = Some(Command::new(candidate));
                         break;
                     }
                 }
@@ -246,27 +285,43 @@ fn start_backend_process(app: &tauri::App) -> Option<std::process::Child> {
         }
     }
 
-    // 3. Fallback: check for bun on PATH or standard directories
+    // 3. Fallback: run server/index.ts with bun from well-known install paths
     if cmd.is_none() {
-        let bun_paths = ["/usr/local/bin/bun", "/opt/homebrew/bin/bun"];
-        let mut bun_bin: Option<String> = None;
-        for bp in bun_paths {
-            if Path::new(bp).exists() {
-                bun_bin = Some(bp.to_string());
-                break;
-            }
-        }
+        let bun_bin: Option<String> = if cfg!(target_os = "windows") {
+            std::env::var("USERPROFILE")
+                .ok()
+                .and_then(|home| {
+                    let p = PathBuf::from(home).join(".bun").join("bin").join("bun.exe");
+                    if p.exists() {
+                        Some(p.to_string_lossy().to_string())
+                    } else {
+                        None
+                    }
+                })
+        } else {
+            ["/usr/local/bin/bun", "/opt/homebrew/bin/bun"]
+                .iter()
+                .find(|bp| Path::new(bp).exists())
+                .map(|bp| bp.to_string())
+                .or_else(|| {
+                    std::env::var("HOME").ok().and_then(|home| {
+                        let p = PathBuf::from(home).join(".bun").join("bin").join("bun");
+                        if p.exists() {
+                            Some(p.to_string_lossy().to_string())
+                        } else {
+                            None
+                        }
+                    })
+                })
+        };
 
-        if bun_bin.is_none() {
-            if let Ok(home) = std::env::var("HOME") {
-                let bp = PathBuf::from(home).join(".bun").join("bin").join("bun");
-                if bp.exists() {
-                    bun_bin = Some(bp.to_string_lossy().to_string());
-                }
+        let bun_executable = bun_bin.unwrap_or_else(|| {
+            if cfg!(target_os = "windows") {
+                "bun.exe".to_string()
+            } else {
+                "bun".to_string()
             }
-        }
-
-        let bun_executable = bun_bin.unwrap_or_else(|| "bun".to_string());
+        });
 
         if let Ok(cwd) = std::env::current_dir() {
             let script_candidates = [
@@ -285,24 +340,69 @@ fn start_backend_process(app: &tauri::App) -> Option<std::process::Child> {
     }
 
     if let Some(mut command) = cmd {
-        command.env("PORT", "3182");
-        command.env("DATA_DIR", data_dir);
-        command.stdout(std::process::Stdio::null());
-        command.stderr(std::process::Stdio::null());
+        command.env("PORT", BACKEND_PORT.to_string());
+        command.env("DATA_DIR", &data_dir);
+
+        let log_file = backend_log_file(&data_dir);
+        match log_file {
+            Some(file) => {
+                let stderr_clone = file.try_clone().ok();
+                command.stdout(file);
+                match stderr_clone {
+                    Some(f) => {
+                        command.stderr(f);
+                    }
+                    None => {
+                        command.stderr(std::process::Stdio::null());
+                    }
+                }
+            }
+            None => {
+                command.stdout(std::process::Stdio::null());
+                command.stderr(std::process::Stdio::null());
+            }
+        }
+
         match command.spawn() {
             Ok(child) => {
-                println!("[Tauri] Backend server started successfully (pid: {})", child.id());
+                println!(
+                    "[Tauri] Backend server started on port {BACKEND_PORT} (pid: {})",
+                    child.id()
+                );
+                log_backend_line(
+                    &data_dir,
+                    &format!("backend spawned on port {BACKEND_PORT} (pid {})", child.id()),
+                );
                 Some(child)
             }
             Err(e) => {
                 eprintln!("[Tauri] Failed to start backend server: {e}");
+                log_backend_line(&data_dir, &format!("backend spawn FAILED: {e}"));
                 None
             }
         }
     } else {
         println!("[Tauri] Backend server binary or script not found, skipping auto-spawn.");
+        log_backend_line(&data_dir, "backend binary or script not found; auto-spawn skipped");
         None
     }
+}
+
+/// Blocks until the sidecar accepts TCP connections on the loopback port, or
+/// the timeout elapses. Keeps the (initially hidden) window from appearing
+/// before the API is actually reachable.
+fn wait_for_backend(timeout: std::time::Duration) -> bool {
+    let addr = std::net::SocketAddr::from(([127, 0, 0, 1], BACKEND_PORT));
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(250))
+            .is_ok()
+        {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(150));
+    }
+    false
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -323,16 +423,24 @@ pub fn run() {
         .setup(|app| {
             // Start local backend server for packaged app
             let child = start_backend_process(app);
+            let backend_spawned = child.is_some();
             app.manage(BackendProcess(std::sync::Mutex::new(child)));
 
             #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
             {
                 let _ = app.deep_link().register_all();
 
-                // Custom window state restore
+                // Custom window state restore — held back until the backend
+                // port answers (or times out) so the UI never appears before
+                // the API it depends on is reachable.
                 let app_handle_restore = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(150));
+                    if backend_spawned
+                        && !wait_for_backend(std::time::Duration::from_secs(10))
+                    {
+                        eprintln!("[Tauri] Backend did not become ready within 10s; showing window anyway.");
+                    }
                     let app_clone = app_handle_restore.clone();
                     let _ = app_handle_restore.run_on_main_thread(move || {
                         window_state::restore_window(&app_clone, "main");

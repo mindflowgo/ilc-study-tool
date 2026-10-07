@@ -42,6 +42,31 @@
   color: #78350f;
 }
 
+/* Dark mode callouts */
+.dark .callout-note {
+  border-color: #3b82f6;
+  background-color: rgba(30, 58, 138, 0.25);
+  color: #93c5fd;
+}
+
+.dark .callout-tip {
+  border-color: #10b981;
+  background-color: rgba(6, 78, 59, 0.25);
+  color: #6ee7b7;
+}
+
+.dark .callout-important {
+  border-color: #8b5cf6;
+  background-color: rgba(76, 29, 149, 0.25);
+  color: #c4b5fd;
+}
+
+.dark .callout-warning {
+  border-color: #f59e0b;
+  background-color: rgba(120, 53, 15, 0.25);
+  color: #fcd34d;
+}
+
 /* Collapsible suggested answers */
 details.suggested-answer {
   border: 1px solid #e7e5e4;
@@ -68,11 +93,51 @@ details.suggested-answer summary:hover {
   color: #1c1917;
 }
 
+.dark details.suggested-answer {
+  border-color: #292524;
+  background-color: #1c1917;
+}
+
+.dark details.suggested-answer[open] {
+  background-color: #292524;
+  border-color: #44403c;
+}
+
+.dark details.suggested-answer summary {
+  color: #d6d3d1;
+}
+
+.dark details.suggested-answer summary:hover {
+  color: #f5f5f4;
+}
+
 /* CodeMirror customizations */
 .cm-editor {
   height: 100% !important;
   font-family: 'JetBrains Mono', monospace !important;
   font-size: 0.875rem !important;
+
+  --cm-bg: #ffffff;
+  --cm-text: #1c1917;
+  --cm-heading: #0c0a09;
+  --cm-mark: #78716c;
+  --cm-muted: #a8a29e;
+  --cm-accent: #d97706;
+  --cm-accent-hover: #b45309;
+  --cm-code: #b45309;
+  --cm-caret: #d97706;
+  --cm-selection: rgba(251, 191, 36, 0.28);
+  --cm-selection-inactive: rgba(231, 229, 228, 0.6);
+  --cm-hairline: #e7e5e4;
+  --cm-surface: #f5f5f4;
+  --cm-surface-strong: #e7e5e4;
+  --cm-quote: #44403c;
+  --cm-link: #2563eb;
+  --cm-link-hover: #1d4ed8;
+  --cm-cell-bg: #ffffff;
+  --cm-keyword: #7c3aed;
+  --cm-string: #15803d;
+  --cm-type: #0891b2;
 }
 
 .cm-scroller {
@@ -83,3 +148,104 @@ details.suggested-answer summary:hover {
 .cm-focused {
   outline: none !important;
 }
+
+.dark .cm-editor {
+  background-color: #0c0a09 !important;
+  color: #f5f5f4 !important;
+
+  --cm-bg: #0c0a09;
+  --cm-text: #f5f5f4;
+  --cm-heading: #fafaf9;
+  --cm-mark: #f59e0b; /* Amber highlight for '#', '##', list marks */
+  --cm-muted: #a8a29e;
+  --cm-accent: #f59e0b;
+  --cm-accent-hover: #fbbf24;
+  --cm-code: #fbbf24;
+  --cm-caret: #f59e0b;
+  --cm-selection: rgba(245, 158, 11, 0.28);
+  --cm-selection-inactive: rgba(41, 37, 36, 0.6);
+  --cm-hairline: #292524;
+  --cm-surface: #1c1917;
+  --cm-surface-strong: #292524;
+  --cm-quote: #d6d3d1;
+  --cm-link: #60a5fa;
+  --cm-link-hover: #93c5fd;
+  --cm-cell-bg: #1c1917;
+  --cm-keyword: #c084fc;
+  --cm-string: #4ade80;
+  --cm-type: #22d3ee;
+}
+
+.dark .cm-scroller {
+  background-color: #0c0a09 !important;
+}
+
+.dark .cm-content {
+  caret-color: #f59e0b !important;
+  color: #f5f5f4 !important;
+}
+
+/* Headings in dark mode: bright and visible */
+.dark .cm-md-heading,
+.dark .cm-md-heading * {
+  color: #fafaf9;
+}
+
+/* The '#', '##', '###' heading marks specifically: amber & high-contrast */
+.dark .cm-md-mark,
+.dark .cm-md-heading .cm-md-mark,
+.dark .cm-md-heading > .cm-md-mark {
+  color: #f59e0b !important;
+  opacity: 0.95 !important;
+  font-weight: 700 !important;
+}
+
+.dark .cm-md-strong {
+  color: #fafaf9 !important;
+}
+
+.dark .cm-md-inline-code,
+.dark .cm-md-code-line {
+  background-color: #1c1917 !important;
+  border-color: #292524 !important;
+  color: #f59e0b !important;
+}
+
+.dark .cm-md-quote {
+  background-color: rgba(251, 191, 36, 0.08) !important;
+  border-left-color: #f59e0b !important;
+  color: #d6d3d1 !important;
+}
+
+.dark .cm-md-ordered-mark,
+.dark .cm-md-bullet {
+  color: #f59e0b !important;
+}
+
+.dark .cm-md-frontmatter {
+  color: #a8a29e !important;
+}
+
+.dark .cm-md-props {
+  background-color: #1c1917 !important;
+  border-color: #292524 !important;
+}
+
+.dark .cm-md-prop-key {
+  color: #a8a29e !important;
+}
+
+.dark .cm-md-prop-value {
+  color: #f5f5f4 !important;
+}
+
+.dark .cm-md-table th {
+  background-color: #1c1917 !important;
+  color: #fafaf9 !important;
+  border-color: #292524 !important;
+}
+
+.dark .cm-md-table td {
+  border-color: #292524 !important;
+}
+

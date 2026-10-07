@@ -1,4 +1,4 @@
-import AdmZip from 'adm-zip';
+import { openArchive } from 'zip-bun';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -54,11 +54,23 @@ export class ArchiveExtractor {
       return null;
     }
 
-    const zip = new AdmZip(zipPath);
+    // zip-bun reader: native miniz bindings, far faster than adm-zip on
+    // large SCORM packages. Entries are read lazily via extractFile(index).
+    const reader = openArchive(zipPath);
     // Ignore macOS resource forks and metadata
-    const zipEntries = zip.getEntries().filter(
-      (e) => !e.entryName.startsWith('__MACOSX') && !path.basename(e.entryName).startsWith('._')
-    );
+    const zipEntries: Array<{ entryName: string; isDirectory: boolean; getData(): Buffer }> = [];
+    for (let i = 0; i < reader.getFileCount(); i++) {
+      const info = reader.getFileByIndex(i);
+      if (info.filename.startsWith('__MACOSX') || path.basename(info.filename).startsWith('._')) {
+        continue;
+      }
+      const index = i;
+      zipEntries.push({
+        entryName: info.filename,
+        isDirectory: info.directory,
+        getData: () => Buffer.from(reader.extractFile(index))
+      });
+    }
     const zipBasename = path.basename(zipPath);
 
     // Ensure asset directories exist
@@ -180,6 +192,7 @@ export class ArchiveExtractor {
         }
       }
     }
+    reader.close();
 
     if (!bestHtmlEntry) return null;
 

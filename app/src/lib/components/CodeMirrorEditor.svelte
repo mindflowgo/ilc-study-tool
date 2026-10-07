@@ -143,7 +143,7 @@
 
 <div
   bind:this={editorContainer}
-  class="h-full w-full overflow-hidden bg-white border border-stone-200 rounded-xl shadow-2xs focus-within:ring-2 focus-within:ring-amber-500/20 transition"
+  class="h-full w-full overflow-hidden bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-xl shadow-2xs focus-within:ring-2 focus-within:ring-amber-500/20 transition"
 ></div>
 
 <style>

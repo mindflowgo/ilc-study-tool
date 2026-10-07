@@ -627,7 +627,7 @@
 <div
   bind:this={containerEl}
   onclick={handleContainerClick}
-  class="markdown-body prose prose-stone max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h2:border-b prose-h2:border-stone-200 prose-h2:pb-2 prose-h3:text-lg prose-p:leading-relaxed prose-img:rounded-lg prose-img:border prose-img:border-stone-200 prose-img:my-4 prose-table:border prose-table:border-stone-200 prose-th:bg-stone-50 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2"
+  class="markdown-body prose prose-stone dark:prose-invert max-w-none prose-headings:font-semibold prose-h1:text-2xl prose-h2:text-xl prose-h2:border-b prose-h2:border-stone-200 dark:prose-h2:border-stone-800 prose-h2:pb-2 prose-h3:text-lg prose-p:leading-relaxed prose-img:rounded-lg prose-img:border prose-img:border-stone-200 dark:prose-img:border-stone-800 prose-img:my-4 prose-table:border prose-table:border-stone-200 dark:prose-table:border-stone-800 prose-th:bg-stone-50 dark:prose-th:bg-stone-900 prose-th:px-3 prose-th:py-2 prose-td:px-3 prose-td:py-2"
 >
   {@html renderedHtml}
 </div>

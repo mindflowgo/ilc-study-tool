@@ -3,18 +3,22 @@ import { EditorView } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 
 const ink = {
-  text: "#1c1917", // stone-900
-  heading: "#0c0a09", // stone-950
-  muted: "#a8a29e", // stone-400
-  accent: "#d97706", // amber-600
-  accentHover: "#b45309", // amber-700
-  code: "#b45309",
-  caret: "#d97706",
-  selection: "rgba(251, 191, 36, 0.28)", // amber-400 tint
-  selectionInactive: "rgba(231, 229, 228, 0.6)",
-  hairline: "#e7e5e4", // stone-200
-  surface: "#f5f5f4", // stone-100
-  surfaceStrong: "#e7e5e4",
+  text: "var(--cm-text, #1c1917)",
+  heading: "var(--cm-heading, #0c0a09)",
+  mark: "var(--cm-mark, #78716c)",
+  muted: "var(--cm-muted, #a8a29e)",
+  accent: "var(--cm-accent, #d97706)",
+  accentHover: "var(--cm-accent-hover, #b45309)",
+  code: "var(--cm-code, #b45309)",
+  caret: "var(--cm-caret, #d97706)",
+  selection: "var(--cm-selection, rgba(251, 191, 36, 0.28))",
+  selectionInactive: "var(--cm-selection-inactive, rgba(231, 229, 228, 0.6))",
+  hairline: "var(--cm-hairline, #e7e5e4)",
+  surface: "var(--cm-surface, #f5f5f4)",
+  surfaceStrong: "var(--cm-surface-strong, #e7e5e4)",
+  quote: "var(--cm-quote, #44403c)",
+  link: "var(--cm-link, #2563eb)",
+  linkHover: "var(--cm-link-hover, #1d4ed8)",
 };
 
 const CHECK_MARK =
@@ -31,7 +35,7 @@ export const PROSE_FONT_FAMILY =
 const editorTheme = EditorView.theme({
   "&": {
     color: ink.text,
-    backgroundColor: "#ffffff",
+    backgroundColor: "var(--cm-bg, #ffffff)",
     height: "100%",
     fontFamily: PROSE_FONT_FAMILY,
     fontSize: "15px",
@@ -71,9 +75,9 @@ const editorTheme = EditorView.theme({
 
   /* ---- Markdown syntax markup (stepped back) ------------------------ */
   ".cm-md-mark": {
-    color: ink.muted,
-    opacity: "0.55",
-    fontWeight: "400",
+    color: ink.mark,
+    opacity: "0.85",
+    fontWeight: "600",
   },
 
   /* ---- Headings ----------------------------------------------------- */
@@ -81,6 +85,10 @@ const editorTheme = EditorView.theme({
     color: ink.heading,
     fontWeight: "650",
     lineHeight: "1.3",
+  },
+  ".cm-md-heading .cm-md-mark": {
+    color: ink.mark,
+    opacity: "0.9",
   },
   ".cm-md-h1": { fontSize: "1.85em", padding: "0.6em 0 0.25em" },
   ".cm-md-h2": { fontSize: "1.48em", padding: "0.6em 0 0.2em", borderBottom: `1px solid ${ink.hairline}` },
@@ -172,14 +180,14 @@ const editorTheme = EditorView.theme({
     padding: "0.1em 0.35em",
   },
   ".cm-md-link": {
-    color: "#2563eb", // blue-600
+    color: ink.link,
     textDecoration: "underline",
     textUnderlineOffset: "0.2em",
     cursor: "pointer",
     transition: "color 140ms ease",
   },
   ".cm-md-link:hover": {
-    color: "#1d4ed8", // blue-700
+    color: ink.linkHover,
   },
 
   /* ---- Blocks ------------------------------------------------------- */
@@ -188,7 +196,7 @@ const editorTheme = EditorView.theme({
     backgroundColor: "rgba(254, 243, 199, 0.2)",
     paddingLeft: "1em",
     borderRadius: "0 0.3em 0.3em 0",
-    color: "#44403c",
+    color: ink.quote,
   },
   ".cm-md-code-line": {
     backgroundColor: ink.surface,
@@ -255,7 +263,7 @@ const editorTheme = EditorView.theme({
     outline: `1.5px solid ${ink.accent}`,
     borderRadius: "2px",
     padding: "2px 4px",
-    background: "#fff",
+    background: "var(--cm-cell-bg, #fff)",
     font: "inherit",
     color: "inherit",
   },
@@ -265,7 +273,7 @@ const editorTheme = EditorView.theme({
     margin: "0 0 1.5em",
     padding: "0.8em 1em",
     borderRadius: "0.6em",
-    backgroundColor: "#fafaf9",
+    backgroundColor: "var(--cm-surface, #fafaf9)",
     border: `1px solid ${ink.hairline}`,
     fontSize: "0.88em",
   },
@@ -277,7 +285,7 @@ const editorTheme = EditorView.theme({
     padding: "0.2em 0.4em",
     borderRadius: "0.3em",
   },
-  ".cm-md-prop:hover, .cm-md-prop:focus-within": { backgroundColor: "#f5f5f4" },
+  ".cm-md-prop:hover, .cm-md-prop:focus-within": { backgroundColor: "var(--cm-surface-strong, #f5f5f4)" },
   ".cm-md-prop-remove": {
     width: "1.3em",
     border: "none",
@@ -357,19 +365,19 @@ const markdownHighlighting = HighlightStyle.define([
   { tag: t.strong, fontWeight: "700", color: ink.heading },
   { tag: t.emphasis, fontStyle: "italic" },
   { tag: t.strikethrough, textDecoration: "line-through" },
-  { tag: [t.link, t.url], color: "#2563eb" },
+  { tag: [t.link, t.url], color: ink.link },
   { tag: [t.monospace, t.special(t.string)], color: ink.code },
-  { tag: t.quote, color: "#44403c" },
+  { tag: t.quote, color: ink.quote },
   { tag: t.contentSeparator, color: ink.hairline },
   { tag: [t.processingInstruction, t.meta], color: ink.muted },
 
-  { tag: [t.keyword, t.moduleKeyword], color: "#7c3aed" },
-  { tag: [t.controlKeyword, t.operatorKeyword], color: "#d97706" },
-  { tag: [t.string, t.regexp], color: "#15803d" },
-  { tag: [t.number, t.bool, t.null], color: "#b45309" },
+  { tag: [t.keyword, t.moduleKeyword], color: "var(--cm-keyword, #7c3aed)" },
+  { tag: [t.controlKeyword, t.operatorKeyword], color: ink.accent },
+  { tag: [t.string, t.regexp], color: "var(--cm-string, #15803d)" },
+  { tag: [t.number, t.bool, t.null], color: ink.code },
   { tag: [t.variableName, t.propertyName], color: ink.text },
-  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#2563eb" },
-  { tag: [t.typeName, t.className, t.namespace], color: "#0891b2" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName)], color: ink.link },
+  { tag: [t.typeName, t.className, t.namespace], color: "var(--cm-type, #0891b2)" },
   { tag: t.comment, color: ink.muted, fontStyle: "italic" },
 ]);
 

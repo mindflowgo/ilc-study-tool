@@ -683,7 +683,7 @@
 {:else}
   <div class="flex-1 flex flex-col h-[calc(100vh-3.5rem)] overflow-hidden">
     <!-- Sub-Header: Lesson Selector & Tabs -->
-    <div class="border-b border-stone-200 bg-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
+    <div class="border-b border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0">
       <!-- Left: Lesson Selector & Add Chapters Button -->
       <div class="flex items-center space-x-2">
         <LessonSelector
@@ -695,33 +695,33 @@
         <div class="flex items-center space-x-1.5 shrink-0">
           <button
             onclick={() => { uploadModalMode = 'add'; isUploadModalOpen = true; }}
-            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition shadow-2xs cursor-pointer"
+            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs cursor-pointer"
             title="Add new chapters / lessons to this course"
           >
-            <Plus class="w-3.5 h-3.5 text-stone-500" />
+            <Plus class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
             <span>Add</span>
           </button>
 
           <button
             onclick={() => { uploadModalMode = 'replace'; isUploadModalOpen = true; }}
-            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition shadow-2xs cursor-pointer"
+            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs cursor-pointer"
             title="Replace current chapter ({currentLessonTitle || selectedLessonId}) with a new file upload"
           >
-            <RefreshCw class="w-3.5 h-3.5 text-stone-500" />
+            <RefreshCw class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
             <span>Replace</span>
           </button>
 
           <button
             onclick={queueAllMissing}
             disabled={isQueueingMissing}
-            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-xs font-medium text-amber-900 transition shadow-2xs cursor-pointer disabled:opacity-50"
+            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-xs font-medium text-amber-900 dark:text-amber-200 transition shadow-2xs cursor-pointer disabled:opacity-50"
             title="Scan course and queue all ungenerated study sheets (Summary, Cheatsheet, Test) in background"
           >
             {#if isQueueingMissing}
-              <Loader2 class="w-3.5 h-3.5 text-amber-600 animate-spin" />
+              <Loader2 class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-spin" />
               <span>Queueing...</span>
             {:else}
-              <Sparkles class="w-3.5 h-3.5 text-amber-600" />
+              <Sparkles class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               <span>Generate Missing</span>
             {/if}
           </button>
@@ -729,10 +729,10 @@
       </div>
 
       <!-- Middle: Study Tabs (Full | Summary | Cheatsheet | Test) -->
-      <div class="inline-flex rounded-lg border border-stone-200 p-0.5 bg-stone-100 text-xs font-medium">
+      <div class="inline-flex rounded-lg border border-stone-200 dark:border-stone-800 p-0.5 bg-stone-100 dark:bg-stone-800/70 text-xs font-medium">
         <button
           onclick={() => { activeTab = 'lesson'; isEditing = false; }}
-          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'lesson' ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'}"
+          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'lesson' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'}"
         >
           <BookOpen class="w-3.5 h-3.5" />
           <span>Full Lesson</span>
@@ -740,7 +740,7 @@
 
         <button
           onclick={() => { activeTab = 'summary'; isEditing = false; }}
-          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'summary' ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'}"
+          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'summary' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'}"
         >
           <Sparkles class="w-3.5 h-3.5" />
           <span>Summary</span>
@@ -748,7 +748,7 @@
 
         <button
           onclick={() => { activeTab = 'cheatsheet'; isEditing = false; }}
-          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'cheatsheet' ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'}"
+          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'cheatsheet' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'}"
         >
           <ListCollapse class="w-3.5 h-3.5" />
           <span>Cheatsheet</span>
@@ -756,7 +756,7 @@
 
         <button
           onclick={() => { activeTab = 'test'; isEditing = false; }}
-          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'test' ? 'bg-white text-stone-900 shadow-2xs font-semibold' : 'text-stone-600 hover:text-stone-900'}"
+          class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'test' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'}"
         >
           <CheckCircle2 class="w-3.5 h-3.5" />
           <span>Practice Test</span>
@@ -796,25 +796,25 @@
             {#if isEditing}
               <button
                 onclick={handleCancelEdit}
-                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 transition shadow-xs hover:shadow-sm cursor-pointer"
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 dark:border-stone-700 bg-white/95 dark:bg-stone-900/95 backdrop-blur-sm hover:bg-white dark:hover:bg-stone-800 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-xs hover:shadow-sm cursor-pointer"
                 title="Discard changes and exit edit mode (Esc)"
               >
-                <X class="w-3.5 h-3.5 text-stone-500" />
+                <X class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
                 <span>Cancel</span>
               </button>
 
               <button
                 onclick={handleSaveEdit}
                 disabled={isSaving}
-                class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900/95 backdrop-blur-sm hover:bg-stone-800 disabled:opacity-50 text-white text-xs font-medium transition shadow-xs hover:shadow-sm cursor-pointer"
+                class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900/95 dark:bg-stone-100 dark:text-stone-950 backdrop-blur-sm hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-50 text-white text-xs font-medium transition shadow-xs hover:shadow-sm cursor-pointer"
                 title="Save changes to file (⌘+S)"
               >
                 {#if isSaving}
                   <Loader2 class="w-3.5 h-3.5 animate-spin" />
                   <span>Saving...</span>
                 {:else if saveSuccessMessage}
-                  <Check class="w-3.5 h-3.5 text-emerald-400" />
-                  <span class="text-emerald-400 font-semibold">{saveSuccessMessage}</span>
+                  <Check class="w-3.5 h-3.5 text-emerald-400 dark:text-emerald-600" />
+                  <span class="text-emerald-400 dark:text-emerald-600 font-semibold">{saveSuccessMessage}</span>
                 {:else}
                   <Save class="w-3.5 h-3.5" />
                   <span>Save</span>
@@ -824,24 +824,24 @@
               <button
                 onclick={handleExportPDF}
                 disabled={isExportingPdf}
-                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer disabled:opacity-50"
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 dark:border-stone-700 bg-white/95 dark:bg-stone-900/95 backdrop-blur-sm hover:bg-white dark:hover:bg-stone-800 text-xs font-medium text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 shadow-xs hover:shadow-sm transition cursor-pointer disabled:opacity-50"
                 title="Generate and download PDF for this document"
               >
                 {#if isExportingPdf}
-                  <Loader2 class="w-3.5 h-3.5 animate-spin text-stone-500" />
+                  <Loader2 class="w-3.5 h-3.5 animate-spin text-stone-500 dark:text-stone-400" />
                   <span>PDF...</span>
                 {:else}
-                  <FileDown class="w-3.5 h-3.5 text-stone-500" />
+                  <FileDown class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
                   <span>PDF</span>
                 {/if}
               </button>
 
               <button
                 onclick={() => (isEditing = true)}
-                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 bg-white/95 backdrop-blur-sm hover:bg-white text-xs font-medium text-stone-700 hover:text-stone-900 shadow-xs hover:shadow-sm transition cursor-pointer"
+                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 dark:border-stone-700 bg-white/95 dark:bg-stone-900/95 backdrop-blur-sm hover:bg-white dark:hover:bg-stone-800 text-xs font-medium text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 shadow-xs hover:shadow-sm transition cursor-pointer"
                 title="Edit content"
               >
-                <Edit3 class="w-3.5 h-3.5 text-stone-500" />
+                <Edit3 class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
                 <span>Edit</span>
               </button>
             {/if}
@@ -849,7 +849,7 @@
         </div>
 
         <!-- Main Card -->
-        <div class="relative bg-white rounded-2xl border border-stone-200 shadow-2xs group">
+        <div class="relative bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xs group">
 
           {#if isEditing}
             <!-- CodeMirror Editor (direct raw markdown with YAML frontmatter) -->

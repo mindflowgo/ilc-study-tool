@@ -147,7 +147,7 @@
   <!-- Trigger Button in Header -->
   <button
     onclick={() => { isOpen = !isOpen; if (isOpen) fetchStatus(); }}
-    class="relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/80 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition shadow-2xs hover:shadow-xs cursor-pointer {status.activeTask ? 'border-amber-400 bg-amber-50/50 text-amber-900' : ''}"
+    class="relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/80 dark:border-stone-700 bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs hover:shadow-xs cursor-pointer {status.activeTask ? 'border-amber-400 dark:border-amber-600 bg-amber-50/50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200' : ''}"
     title="Background AI Generation Queue"
   >
     {#if status.activeTask}
@@ -164,7 +164,7 @@
       </span>
     {/if}
 
-    <ChevronDown class="w-3 h-3 text-stone-400 ml-0.5" />
+    <ChevronDown class="w-3 h-3 text-stone-400 dark:text-stone-500 ml-0.5" />
   </button>
 
   <!-- Popover Menu -->
@@ -176,17 +176,17 @@
     ></div>
 
     <div
-      class="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white border border-stone-200 shadow-xl z-50 p-4 space-y-3 animate-in fade-in zoom-in-95 duration-150 text-xs"
+      class="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-xl z-50 p-4 space-y-3 animate-in fade-in zoom-in-95 duration-150 text-xs"
     >
       <!-- Header -->
-      <div class="flex items-center justify-between pb-2 border-b border-stone-100">
+      <div class="flex items-center justify-between pb-2 border-b border-stone-100 dark:border-stone-800">
         <div class="flex items-center space-x-2">
-          <div class="p-1.5 rounded-lg bg-amber-50 text-amber-600">
+          <div class="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
             <Sparkles class="w-4 h-4" />
           </div>
           <div>
-            <h3 class="font-semibold text-stone-900">AI Generation Queue</h3>
-            <p class="text-[11px] text-stone-400">
+            <h3 class="font-semibold text-stone-900 dark:text-stone-100">AI Generation Queue</h3>
+            <p class="text-[11px] text-stone-400 dark:text-stone-500">
               {#if status.isPaused}
                 Queue paused
               {:else if status.activeTask}
@@ -202,7 +202,7 @@
 
         <button
           onclick={() => (isOpen = false)}
-          class="p-1 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition cursor-pointer"
+          class="p-1 rounded-md text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition cursor-pointer"
         >
           <X class="w-4 h-4" />
         </button>
@@ -210,17 +210,17 @@
 
       <!-- Active Task Card -->
       {#if status.activeTask}
-        <div class="p-2.5 rounded-xl bg-amber-50/80 border border-amber-200/60 space-y-1.5">
-          <div class="flex items-center justify-between text-[11px] font-medium text-amber-800">
+        <div class="p-2.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/60 space-y-1.5">
+          <div class="flex items-center justify-between text-[11px] font-medium text-amber-800 dark:text-amber-300">
             <div class="flex items-center space-x-1.5">
-              <Loader2 class="w-3.5 h-3.5 animate-spin text-amber-600" />
+              <Loader2 class="w-3.5 h-3.5 animate-spin text-amber-600 dark:text-amber-400" />
               <span>Generating {status.activeTask.tab.toUpperCase()}</span>
             </div>
-            <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-900">
+            <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
               Active
             </span>
           </div>
-          <p class="text-xs font-semibold text-stone-900 truncate">
+          <p class="text-xs font-semibold text-stone-900 dark:text-stone-100 truncate">
             {status.activeTask.lessonId} — {status.activeTask.lessonTitle}
           </p>
         </div>
@@ -229,11 +229,11 @@
       <!-- Progress Stats -->
       {#if status.pendingCount > 0 || status.completedCount > 0}
         <div class="space-y-1">
-          <div class="flex items-center justify-between text-[11px] text-stone-500">
+          <div class="flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400">
             <span>Progress ({status.completedCount} completed)</span>
-            <span class="font-semibold text-stone-800">{status.pendingCount} remaining</span>
+            <span class="font-semibold text-stone-800 dark:text-stone-200">{status.pendingCount} remaining</span>
           </div>
-          <div class="w-full h-1.5 bg-stone-100 rounded-full overflow-hidden">
+          <div class="w-full h-1.5 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
             <div
               class="h-full bg-amber-500 rounded-full transition-all duration-300"
               style="width: {progressPercent}%"
@@ -248,7 +248,7 @@
           {#if status.isPaused}
             <button
               onclick={() => sendAction('resume')}
-              class="flex items-center space-x-1 px-2.5 py-1 rounded-md border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-medium transition cursor-pointer"
+              class="flex items-center space-x-1 px-2.5 py-1 rounded-md border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 font-medium transition cursor-pointer"
             >
               <Play class="w-3 h-3" />
               <span>Resume</span>
@@ -256,7 +256,7 @@
           {:else if status.pendingCount > 0 || status.activeTask}
             <button
               onclick={() => sendAction('pause')}
-              class="flex items-center space-x-1 px-2.5 py-1 rounded-md border border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100 font-medium transition cursor-pointer"
+              class="flex items-center space-x-1 px-2.5 py-1 rounded-md border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 font-medium transition cursor-pointer"
             >
               <Pause class="w-3 h-3" />
               <span>Pause</span>
@@ -266,7 +266,7 @@
           {#if status.failedCount > 0}
             <button
               onclick={() => sendAction('retry')}
-              class="flex items-center space-x-1 px-2 py-1 rounded-md border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 font-medium transition cursor-pointer"
+              class="flex items-center space-x-1 px-2 py-1 rounded-md border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50 font-medium transition cursor-pointer"
             >
               <RotateCcw class="w-3 h-3" />
               <span>Retry ({status.failedCount})</span>
@@ -276,7 +276,7 @@
           {#if status.pendingCount > 0}
             <button
               onclick={() => sendAction('cancel')}
-              class="flex items-center space-x-1 px-2 py-1 rounded-md border border-stone-200 text-stone-500 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+              class="flex items-center space-x-1 px-2 py-1 rounded-md border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
               title="Cancel all pending tasks"
             >
               <Trash2 class="w-3 h-3" />
@@ -288,7 +288,7 @@
         {#if courseId && status.pendingCount === 0 && !status.activeTask}
           <button
             onclick={enqueueMissing}
-            class="flex items-center space-x-1 text-amber-600 hover:text-amber-700 font-medium cursor-pointer"
+            class="flex items-center space-x-1 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium cursor-pointer"
           >
             <Sparkles class="w-3 h-3" />
             <span>Generate Missing</span>
@@ -298,7 +298,7 @@
 
       <!-- Recent / Queued Tasks List -->
       {#if status.tasks.length > 0}
-        <div class="max-h-48 overflow-y-auto divide-y divide-stone-100 border-t border-stone-100 pt-2 space-y-1">
+        <div class="max-h-48 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800 border-t border-stone-100 dark:border-stone-800 pt-2 space-y-1">
           {#each status.tasks.slice(0, 15) as task (task.id)}
             <div class="py-1.5 px-1 text-[11px]">
               <div class="flex items-center justify-between">
@@ -310,25 +310,25 @@
                   {:else if task.status === 'failed'}
                     <AlertCircle class="w-3.5 h-3.5 text-rose-500 shrink-0" />
                   {:else}
-                    <Clock class="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                    <Clock class="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 shrink-0" />
                   {/if}
 
-                  <span class="truncate font-medium text-stone-700">
+                  <span class="truncate font-medium text-stone-700 dark:text-stone-300">
                     {task.lessonId}
                   </span>
 
-                  <span class="uppercase text-[9px] font-semibold px-1 py-0.2 rounded bg-stone-100 text-stone-600 shrink-0">
+                  <span class="uppercase text-[9px] font-semibold px-1 py-0.2 rounded bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 shrink-0">
                     {task.tab}
                   </span>
                 </div>
 
-                <div class="shrink-0 text-[10px] text-stone-400">
+                <div class="shrink-0 text-[10px] text-stone-400 dark:text-stone-500">
                   {#if task.status === 'processing'}
-                    <span class="text-amber-600 font-medium">Running</span>
+                    <span class="text-amber-600 dark:text-amber-400 font-medium">Running</span>
                   {:else if task.status === 'completed'}
-                    <span class="text-emerald-600 font-medium">Done</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-medium">Done</span>
                   {:else if task.status === 'failed'}
-                    <span class="text-rose-600 font-medium">Failed</span>
+                    <span class="text-rose-600 dark:text-rose-400 font-medium">Failed</span>
                   {:else}
                     <span>Pending</span>
                   {/if}
@@ -336,7 +336,7 @@
               </div>
 
               {#if task.status === 'failed' && task.error}
-                <div class="mt-1 text-[10px] text-rose-700 bg-rose-50 border border-rose-100 p-1.5 rounded font-mono break-all leading-tight">
+                <div class="mt-1 text-[10px] text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900 p-1.5 rounded font-mono break-all leading-tight">
                   {task.error}
                 </div>
               {/if}
@@ -344,7 +344,7 @@
           {/each}
         </div>
       {:else}
-        <div class="py-4 text-center text-stone-400 text-[11px]">
+        <div class="py-4 text-center text-stone-400 dark:text-stone-500 text-[11px]">
           No active or pending AI generation tasks.
         </div>
       {/if}

@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import yaml from 'js-yaml';
 
 const DATA_DIR = path.resolve(process.cwd(), '../data/courses');
 
@@ -10,7 +9,7 @@ function parseFrontmatter(fileContent: string): { frontmatter: Record<string, an
     return { frontmatter: {}, body: fileContent };
   }
   try {
-    const frontmatter = (yaml.load(match[1]) as Record<string, any>) || {};
+    const frontmatter = ((globalThis as any).Bun.YAML.parse(match[1]) as Record<string, any>) || {};
     return { frontmatter, body: match[2] };
   } catch {
     return { frontmatter: {}, body: fileContent };
@@ -18,7 +17,7 @@ function parseFrontmatter(fileContent: string): { frontmatter: Record<string, an
 }
 
 function serializeFrontmatter(frontmatter: Record<string, any>, body: string): string {
-  const yamlStr = yaml.dump(frontmatter, { lineWidth: -1, quotingType: '"', forceQuotes: false });
+  const yamlStr = (globalThis as any).Bun.YAML.stringify(frontmatter);
   return `---\n${yamlStr}---\n\n${body.trim()}\n`;
 }
 

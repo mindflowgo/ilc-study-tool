@@ -2,6 +2,7 @@
 .DS_Store
 .freebuff
 .zcode
+.zcodeignore
 .env
 node_modules/
 .svelte-kit/

@@ -129,14 +129,14 @@
 </script>
 
 {#if isOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 backdrop-blur-xs">
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 dark:bg-black/60 backdrop-blur-xs">
     <div
-      class="w-full max-w-md rounded-2xl bg-white border border-stone-200 shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150"
+      class="w-full max-w-md rounded-2xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150"
     >
       <!-- Modal Header -->
-      <div class="flex items-center justify-between pb-3 border-b border-stone-100">
+      <div class="flex items-center justify-between pb-3 border-b border-stone-100 dark:border-stone-800">
         <div class="flex items-center space-x-2">
-          <div class="p-1.5 rounded-lg {mode === 'replace' ? 'bg-amber-50 text-amber-600' : 'bg-stone-100 text-stone-700'}">
+          <div class="p-1.5 rounded-lg {mode === 'replace' ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400' : 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300'}">
             {#if mode === 'replace'}
               <RefreshCw class="w-4 h-4" />
             {:else if presetCourseId}
@@ -146,7 +146,7 @@
             {/if}
           </div>
           <div>
-            <h2 class="text-sm font-semibold text-stone-900">
+            <h2 class="text-sm font-semibold text-stone-900 dark:text-stone-100">
               {#if mode === 'replace'}
                 Replace Chapter {targetLessonTitle ? `(${targetLessonTitle})` : targetLessonId}
               {:else if presetCourseId}
@@ -155,7 +155,7 @@
                 Upload Course Package
               {/if}
             </h2>
-            <p class="text-[11px] text-stone-400">
+            <p class="text-[11px] text-stone-400 dark:text-stone-500">
               {#if mode === 'replace'}
                 Upload a replacement package (.zip, .mhtml, .html) for this chapter.
               {:else if presetCourseId}
@@ -168,7 +168,7 @@
         </div>
         <button
           onclick={onClose}
-          class="p-1 rounded-md text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition"
+          class="p-1 rounded-md text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition cursor-pointer"
         >
           <X class="w-4 h-4" />
         </button>
@@ -177,19 +177,19 @@
       <!-- Course Identifier Input (only shown if not preset) -->
       {#if !presetCourseId}
         <div class="space-y-1.5">
-          <label for="course-id" class="text-xs font-medium text-stone-700">Course Identifier (e.g. clu3m, eng4u)</label>
+          <label for="course-id" class="text-xs font-medium text-stone-700 dark:text-stone-300">Course Identifier (e.g. clu3m, eng4u)</label>
           <input
             id="course-id"
             type="text"
             bind:value={courseId}
             placeholder="clu3m"
-            class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
+            class="w-full px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-950 text-xs text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
           />
         </div>
       {:else}
-        <div class="p-2.5 rounded-lg bg-stone-50 border border-stone-200 text-xs text-stone-600 flex items-center justify-between">
-          <span class="font-medium text-stone-700">Target Course:</span>
-          <span class="font-mono uppercase font-bold text-stone-900 bg-white px-2 py-0.5 rounded border border-stone-200">
+        <div class="p-2.5 rounded-lg bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 text-xs text-stone-600 dark:text-stone-300 flex items-center justify-between">
+          <span class="font-medium text-stone-700 dark:text-stone-300">Target Course:</span>
+          <span class="font-mono uppercase font-bold text-stone-900 dark:text-stone-100 bg-white dark:bg-stone-900 px-2 py-0.5 rounded border border-stone-200 dark:border-stone-700">
             {presetCourseId}
           </span>
         </div>
@@ -202,18 +202,18 @@
         ondragover={(e) => { e.preventDefault(); isDragging = true; }}
         ondragleave={() => (isDragging = false)}
         ondrop={handleDrop}
-        class="border-2 border-dashed rounded-xl p-6 text-center space-y-2 transition {isDragging ? 'border-stone-900 bg-stone-50' : 'border-stone-200 hover:border-stone-300'}"
+        class="border-2 border-dashed rounded-xl p-6 text-center space-y-2 transition {isDragging ? 'border-stone-900 dark:border-stone-100 bg-stone-50 dark:bg-stone-800/40' : 'border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600'}"
       >
-        <div class="mx-auto w-10 h-10 rounded-full bg-stone-50 border border-stone-200 flex items-center justify-center text-stone-400">
+        <div class="mx-auto w-10 h-10 rounded-full bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 flex items-center justify-center text-stone-400 dark:text-stone-500">
           <FileArchive class="w-5 h-5" />
         </div>
-        <div class="text-xs text-stone-600">
-          <label for="zip-files" class="font-semibold text-stone-900 hover:underline cursor-pointer">
+        <div class="text-xs text-stone-600 dark:text-stone-400">
+          <label for="zip-files" class="font-semibold text-stone-900 dark:text-stone-100 hover:underline cursor-pointer">
             Browse files
           </label>
           or drag & drop lesson files (.zip, .mhtml, .html)
         </div>
-        <p class="text-[11px] text-stone-400">Supports ILC packages, browser-saved complete page zips, and MHTML archives</p>
+        <p class="text-[11px] text-stone-400 dark:text-stone-500">Supports ILC packages, browser-saved complete page zips, and MHTML archives</p>
         <input
           id="zip-files"
           type="file"
@@ -226,57 +226,57 @@
 
       <!-- File List -->
       {#if selectedFiles.length > 0}
-        <div class="max-h-36 overflow-y-auto space-y-1 rounded-lg border border-stone-100 p-2 bg-stone-50/50">
+        <div class="max-h-36 overflow-y-auto space-y-1 rounded-lg border border-stone-100 dark:border-stone-800 p-2 bg-stone-50/50 dark:bg-stone-800/40">
           {#each selectedFiles as f}
-            <div class="flex items-center justify-between text-[11px] text-stone-700 py-0.5">
+            <div class="flex items-center justify-between text-[11px] text-stone-700 dark:text-stone-300 py-0.5">
               <span class="truncate max-w-[260px]">{f.name}</span>
-              <span class="text-stone-400 font-mono text-[10px]">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+              <span class="text-stone-400 dark:text-stone-500 font-mono text-[10px]">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
             </div>
           {/each}
         </div>
       {/if}
 
       <!-- Auto-generate AI Study Materials Toggle -->
-      <div class="p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/50">
-        <label class="flex items-center space-x-2 text-xs text-stone-800 cursor-pointer select-none">
+      <div class="p-2.5 rounded-xl bg-amber-50/60 dark:bg-amber-950/40 border border-amber-200/50 dark:border-amber-800/50">
+        <label class="flex items-center space-x-2 text-xs text-stone-800 dark:text-stone-200 cursor-pointer select-none">
           <input
             type="checkbox"
             bind:checked={autoGenerateAI}
-            class="rounded border-stone-300 text-amber-600 focus:ring-amber-500 cursor-pointer"
+            class="rounded border-stone-300 dark:border-stone-700 text-amber-600 focus:ring-amber-500 cursor-pointer"
           />
           <div class="flex items-center space-x-1.5 flex-1 min-w-0">
             <Sparkles class="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span class="font-medium text-stone-900">Auto-queue AI Study Materials</span>
-            <span class="text-[10px] text-stone-500 hidden sm:inline">(Summary, Cheatsheet, Test)</span>
+            <span class="font-medium text-stone-900 dark:text-stone-100">Auto-queue AI Study Materials</span>
+            <span class="text-[10px] text-stone-500 dark:text-stone-400 hidden sm:inline">(Summary, Cheatsheet, Test)</span>
           </div>
         </label>
       </div>
 
       <!-- Error message -->
       {#if errorMessage}
-        <div class="flex items-center space-x-2 text-rose-600 text-xs bg-rose-50 border border-rose-100 p-2.5 rounded-lg">
+        <div class="flex items-center space-x-2 text-rose-600 dark:text-rose-300 text-xs bg-rose-50 dark:bg-rose-950/50 border border-rose-100 dark:border-rose-900 p-2.5 rounded-lg">
           <AlertCircle class="w-4 h-4 shrink-0" />
           <span>{errorMessage}</span>
         </div>
       {/if}
 
       <!-- Actions -->
-      <div class="flex items-center justify-between pt-2 border-t border-stone-100">
-        <span class="text-[11px] text-stone-400">
+      <div class="flex items-center justify-between pt-2 border-t border-stone-100 dark:border-stone-800">
+        <span class="text-[11px] text-stone-400 dark:text-stone-500">
           Existing notes are preserved.
         </span>
         <div class="flex items-center space-x-2">
           <button
             onclick={onClose}
             disabled={isUploading}
-            class="px-3.5 py-1.5 rounded-lg border border-stone-200 text-xs text-stone-700 hover:bg-stone-50 transition"
+            class="px-3.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 text-xs text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-stone-800 transition cursor-pointer"
           >
             Cancel
           </button>
           <button
             onclick={uploadFiles}
             disabled={isUploading || selectedFiles.length === 0}
-            class="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+            class="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-medium hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm cursor-pointer"
           >
             {#if isUploading}
               <Loader2 class="w-3.5 h-3.5 animate-spin" />

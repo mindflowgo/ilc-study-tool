@@ -161,26 +161,26 @@
   <!-- Page Hero & Search -->
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div>
-      <h1 class="text-2xl font-bold tracking-tight text-stone-900">Your Courses</h1>
-      <p class="text-xs text-stone-500 mt-1">
+      <h1 class="text-2xl font-bold tracking-tight text-stone-900 dark:text-stone-100">Your Courses</h1>
+      <p class="text-xs text-stone-500 dark:text-stone-400 mt-1">
         Distraction-free study notes, summaries, cheatsheets, and interactive practice tests.
       </p>
     </div>
 
     <div class="flex items-center space-x-3">
       <div class="relative w-full sm:w-64">
-        <Search class="absolute left-3 top-2.5 w-3.5 h-3.5 text-stone-400" />
+        <Search class="absolute left-3 top-2.5 w-3.5 h-3.5 text-stone-400 dark:text-stone-500" />
         <input
           type="text"
           bind:value={searchQuery}
           placeholder="Filter courses..."
-          class="w-full pl-9 pr-3 py-1.5 rounded-lg border border-stone-200 bg-white text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+          class="w-full pl-9 pr-3 py-1.5 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-xs text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100 transition"
         />
       </div>
 
       <button
         onclick={() => (isUploadModalOpen = true)}
-        class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 transition shadow-2xs shrink-0"
+        class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-medium hover:bg-stone-800 dark:hover:bg-white transition shadow-2xs shrink-0 cursor-pointer"
       >
         <Plus class="w-3.5 h-3.5" />
         <span>Add Course</span>
@@ -192,10 +192,10 @@
   {#if isLoading}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {#each [1, 2, 3] as _}
-        <div class="h-56 rounded-2xl border border-stone-200 bg-white p-6 animate-pulse space-y-4">
-          <div class="w-16 h-5 bg-stone-100 rounded"></div>
-          <div class="w-3/4 h-6 bg-stone-100 rounded"></div>
-          <div class="w-full h-12 bg-stone-100 rounded"></div>
+        <div class="h-56 rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-6 animate-pulse space-y-4">
+          <div class="w-16 h-5 bg-stone-100 dark:bg-stone-800 rounded"></div>
+          <div class="w-3/4 h-6 bg-stone-100 dark:bg-stone-800 rounded"></div>
+          <div class="w-full h-12 bg-stone-100 dark:bg-stone-800 rounded"></div>
         </div>
       {/each}
     </div>
@@ -205,25 +205,25 @@
         {@const totalLessons = course.units.reduce((acc, u) => acc + u.lessons.length, 0)}
         <a
           href="/courses/{course.id}"
-          class="group relative rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs hover:shadow-md hover:border-stone-300 transition flex flex-col justify-between"
+          class="group relative rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-6 shadow-2xs hover:shadow-md hover:border-stone-300 dark:hover:border-stone-700 transition flex flex-col justify-between"
         >
           <div class="space-y-3">
             <div>
-              <h2 class="text-base font-semibold text-stone-900 group-hover:text-stone-700 transition">
-                <span class="text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 text-stone-800 border border-stone-200">
+              <h2 class="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-700 dark:group-hover:text-stone-300 transition">
+                <span class="text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700">
                 {course.id}
               </span> {course.title}
               </h2>
             </div>
 
             <!-- Stats & Pills -->
-            <div class="flex flex-wrap items-center gap-2 pt-2 text-[11px] text-stone-600">
-              <div class="flex items-center space-x-1 px-2 py-1 rounded bg-stone-50 border border-stone-100">
-                <Layers class="w-3 h-3 text-stone-400" />
+            <div class="flex flex-wrap items-center gap-2 pt-2 text-[11px] text-stone-600 dark:text-stone-400">
+              <div class="flex items-center space-x-1 px-2 py-1 rounded bg-stone-50 dark:bg-stone-800/60 border border-stone-100 dark:border-stone-700/80">
+                <Layers class="w-3 h-3 text-stone-400 dark:text-stone-500" />
                 <span>{course.units.length} Units</span>
               </div>
-              <div class="flex items-center space-x-1 px-2 py-1 rounded bg-stone-50 border border-stone-100">
-                <FileText class="w-3 h-3 text-stone-400" />
+              <div class="flex items-center space-x-1 px-2 py-1 rounded bg-stone-50 dark:bg-stone-800/60 border border-stone-100 dark:border-stone-700/80">
+                <FileText class="w-3 h-3 text-stone-400 dark:text-stone-500" />
                 <span>{totalLessons} Lessons</span>
               </div>
             <ArrowRight class="w-4 h-4 transform group-hover:translate-x-1 transition" />
@@ -231,9 +231,9 @@
           </div>
 
           <!-- Bottom Footer -->
-          <div class="mt-1 pt-2 border-t border-stone-100">
+          <div class="mt-1 pt-2 border-t border-stone-100 dark:border-stone-800">
             <div class="flex items-center justify-between">
-              <div class="text-xs text-stone-400 mt-0.5">Download Course PDFs</div>
+              <div class="text-xs text-stone-400 dark:text-stone-500 mt-0.5">Download Course PDFs</div>
               <button
                 type="button"
                 title="Open course folder"
@@ -243,13 +243,13 @@
                   e.stopPropagation();
                   openCourseFolder(course.id, course.path);
                 }}
-                class="p-1 -mr-1 rounded-md text-stone-400 hover:text-stone-800 hover:bg-stone-100 hover:border-stone-200 border border-transparent transition cursor-pointer"
+                class="p-1 -mr-1 rounded-md text-stone-400 dark:text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 hover:border-stone-200 dark:hover:border-stone-700 border border-transparent transition cursor-pointer"
               >
                 <Folder class="w-3.5 h-3.5" />
               </button>
             </div>
 
-            <div class="grid grid-cols-4 gap-1.5 text-xs font-medium text-stone-700 mt-2">
+            <div class="grid grid-cols-4 gap-1.5 text-xs font-medium text-stone-700 dark:text-stone-300 mt-2">
               <!-- Notes -->
               <button
                 type="button"
@@ -260,10 +260,10 @@
                   handleDownloadCoursePdf(course, 'notes');
                 }}
                 disabled={Boolean(activeDownloads[`${course.id}:notes`])}
-                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 hover:bg-stone-200 hover:text-stone-900 text-stone-800 border border-stone-200 transition cursor-pointer disabled:opacity-50"
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer disabled:opacity-50"
               >
                 {#if activeDownloads[`${course.id}:notes`]}
-                  <Loader2 class="w-3 h-3 animate-spin text-stone-600" />
+                  <Loader2 class="w-3 h-3 animate-spin text-stone-600 dark:text-stone-400" />
                 {:else}
                   <span>Notes</span>
                 {/if}
@@ -279,7 +279,7 @@
                   handleDownloadCoursePdf(course, 'summary');
                 }}
                 disabled={Boolean(activeDownloads[`${course.id}:summary`])}
-                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 hover:bg-stone-200 hover:text-stone-900 text-stone-800 border border-stone-200 transition cursor-pointer disabled:opacity-50 relative"
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer disabled:opacity-50 relative"
               >
                 {#if activeDownloads[`${course.id}:summary`]}
                   <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
@@ -301,7 +301,7 @@
                   handleDownloadCoursePdf(course, 'cheatsheet');
                 }}
                 disabled={Boolean(activeDownloads[`${course.id}:cheatsheet`])}
-                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 hover:bg-stone-200 hover:text-stone-900 text-stone-800 border border-stone-200 transition cursor-pointer disabled:opacity-50 relative"
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer disabled:opacity-50 relative"
               >
                 {#if activeDownloads[`${course.id}:cheatsheet`]}
                   <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
@@ -323,7 +323,7 @@
                   handleDownloadCoursePdf(course, 'test');
                 }}
                 disabled={Boolean(activeDownloads[`${course.id}:test`])}
-                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 hover:bg-stone-200 hover:text-stone-900 text-stone-800 border border-stone-200 transition cursor-pointer disabled:opacity-50 relative"
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer disabled:opacity-50 relative"
               >
                 {#if activeDownloads[`${course.id}:test`]}
                   <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
@@ -342,7 +342,7 @@
       <!-- Add New Course Card -->
       <button
         onclick={() => (isUploadModalOpen = true)}
-        class="h-full min-h-[220px] rounded-2xl border-2 border-dashed border-stone-200 hover:border-stone-400 hover:bg-stone-50/50 p-6 flex flex-col items-center justify-center text-center space-y-3 transition group"
+        class="h-full min-h-[220px] rounded-2xl border-2 border-dashed border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 hover:bg-stone-50/50 dark:hover:bg-stone-900/50 p-6 flex flex-col items-center justify-center text-center space-y-3 transition group cursor-pointer"
       >
         <div class="w-10 h-10 rounded-full bg-stone-100 group-hover:bg-stone-200 text-stone-600 flex items-center justify-center transition">
           <Plus class="w-5 h-5" />

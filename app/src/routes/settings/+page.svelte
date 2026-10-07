@@ -17,8 +17,13 @@
     Folder,
     Download,
     Upload,
-    Archive
+    Archive,
+    Palette,
+    Sun,
+    Moon,
+    Monitor
   } from 'lucide-svelte';
+  import { theme } from '$lib/theme.svelte';
 
   // Storage state
   interface StorageInfo {
@@ -457,403 +462,421 @@
 
 <Header />
 
-<main class="flex-1 overflow-y-auto px-4 py-8 sm:px-8 max-w-4xl mx-auto w-full space-y-8">
-  <div>
-    <h1 class="text-2xl font-bold tracking-tight text-stone-900">Settings</h1>
-    <p class="text-xs text-stone-500 mt-1">
-      Manage course location & LLM tool.
-    </p>
+<main class="flex-1 overflow-y-auto px-4 py-4 max-w-3xl mx-auto w-full space-y-3 text-stone-900 dark:text-stone-100">
+  <div class="flex items-center justify-between pb-1 border-b border-stone-200 dark:border-stone-800">
+    <div>
+      <h1 class="text-base font-semibold text-stone-900 dark:text-stone-100">Settings</h1>
+      <p class="text-[11px] text-stone-500 dark:text-stone-400">Appearance, course storage, AI provider, and maintenance.</p>
+    </div>
   </div>
 
-  <!-- Course Data Storage & Backup Section -->
-  <section class="rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs space-y-6">
-    <div class="flex items-center justify-between pb-3 border-b border-stone-100">
+  <!-- Panel 1: General & Storage -->
+  <section class="rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-2xs divide-y divide-stone-100 dark:divide-stone-800 text-xs">
+    <!-- Theme / UI Row -->
+    <div class="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
       <div class="flex items-center space-x-2">
-        <HardDrive class="w-4 h-4 text-stone-700" />
-        <h2 class="text-sm font-semibold text-stone-900">Course Data Configuration</h2>
+        <Palette class="w-3.5 h-3.5 text-stone-600 dark:text-stone-400 shrink-0" />
+        <div>
+          <span class="font-medium text-stone-900 dark:text-stone-100">Appearance</span>
+          <span class="text-[11px] text-stone-400 dark:text-stone-500 ml-1.5">({theme.isDark ? 'Dark Mode' : 'Light Mode'})</span>
+        </div>
       </div>
-      {#if storageInfo}
-        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium {storageInfo.isCustom ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">
-          {storageInfo.isCustom ? 'Custom Location' : 'Default OS Location'}
-        </span>
+
+      <!-- Segmented Theme Toggle -->
+      <div class="inline-flex p-0.5 rounded-md bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 self-start sm:self-auto">
+        <button
+          type="button"
+          onclick={() => theme.setTheme('light')}
+          class="flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer {theme.current === 'light' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100'}"
+        >
+          <Sun class="w-3.5 h-3.5" />
+          <span>Light</span>
+        </button>
+        <button
+          type="button"
+          onclick={() => theme.setTheme('dark')}
+          class="flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer {theme.current === 'dark' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100'}"
+        >
+          <Moon class="w-3.5 h-3.5" />
+          <span>Dark</span>
+        </button>
+        <button
+          type="button"
+          onclick={() => theme.setTheme('system')}
+          class="flex items-center space-x-1 px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer {theme.current === 'system' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100'}"
+        >
+          <Monitor class="w-3.5 h-3.5" />
+          <span>System</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Course Data Storage Row -->
+    <div class="p-3 space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-1.5">
+        <div class="flex items-center space-x-2">
+          <HardDrive class="w-3.5 h-3.5 text-stone-600 dark:text-stone-400 shrink-0" />
+          <span class="font-medium text-stone-900 dark:text-stone-100">Course Data Directory</span>
+          {#if storageInfo}
+            <span class="text-[11px] text-stone-400 dark:text-stone-500">
+              ({storageInfo.courseCount} {storageInfo.courseCount === 1 ? 'course' : 'courses'} &bull; {storageInfo.totalSizeFormatted})
+            </span>
+          {/if}
+        </div>
+
+        <div class="flex items-center space-x-1.5">
+          {#if storageInfo}
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium {storageInfo.isCustom ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800' : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'}">
+              {storageInfo.isCustom ? 'Custom' : 'Default OS'}
+            </span>
+          {/if}
+
+          <button
+            onclick={openFolder}
+            type="button"
+            class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-[11px] text-stone-700 dark:text-stone-300 font-medium transition cursor-pointer"
+            title="Open folder in Finder or File Explorer"
+          >
+            <FolderOpen class="w-3 h-3" />
+            <span>Open</span>
+          </button>
+
+          {#if !isChangingPath}
+            <button
+              onclick={chooseFolder}
+              type="button"
+              class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-[11px] text-stone-700 dark:text-stone-300 font-medium transition cursor-pointer"
+            >
+              <Folder class="w-3 h-3" />
+              <span>Change</span>
+            </button>
+          {/if}
+
+          {#if storageInfo?.isCustom}
+            <button
+              onclick={resetStorageToDefault}
+              type="button"
+              class="flex items-center space-x-1 px-2 py-1 rounded text-[11px] text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 transition cursor-pointer"
+              title="Reset location back to application default"
+            >
+              <RotateCw class="w-3 h-3" />
+              <span>Reset</span>
+            </button>
+          {/if}
+        </div>
+      </div>
+
+      <!-- Active Path Box -->
+      <div class="font-mono text-[11px] text-stone-700 dark:text-stone-300 break-all select-all bg-stone-50 dark:bg-stone-950 px-2 py-1.5 rounded border border-stone-200 dark:border-stone-800">
+        {storageInfo?.dataDir || 'Loading...'}
+      </div>
+
+      {#if storageMessage}
+        <div class="flex items-center space-x-1.5 text-[11px] px-2 py-1 rounded border {storageMessage.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200' : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'}">
+          {#if storageMessage.type === 'success'}
+            <CheckCircle2 class="w-3 h-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          {:else}
+            <AlertCircle class="w-3 h-3 shrink-0 text-rose-600 dark:text-rose-400" />
+          {/if}
+          <span>{storageMessage.text}</span>
+        </div>
+      {/if}
+
+      <!-- Change Directory Form (Inline) -->
+      {#if isChangingPath}
+        <div class="p-2.5 rounded border border-stone-200 dark:border-stone-700 bg-stone-50/70 dark:bg-stone-800/40 space-y-2 mt-1">
+          <div class="flex items-center gap-1.5">
+            <input
+              id="new-path-input"
+              type="text"
+              bind:value={newPath}
+              placeholder={storageInfo?.dataDir || '/path/to/data'}
+              class="flex-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 text-xs font-mono text-stone-900 dark:text-stone-100 bg-white dark:bg-stone-950 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
+            />
+            <button
+              onclick={chooseFolder}
+              type="button"
+              class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-xs font-medium text-stone-700 dark:text-stone-200 transition cursor-pointer shrink-0"
+            >
+              <Folder class="w-3 h-3" />
+              <span>Browse...</span>
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+            <label for="migrate-data-checkbox" class="flex items-center space-x-1.5 text-[11px] text-stone-600 dark:text-stone-400 select-none cursor-pointer">
+              <input
+                id="migrate-data-checkbox"
+                type="checkbox"
+                bind:checked={migrateExisting}
+                class="rounded border-stone-300 dark:border-stone-600 text-stone-900 dark:text-stone-100 focus:ring-stone-900 h-3 w-3"
+              />
+              <span>Copy existing courses, prompts, and config to new path</span>
+            </label>
+
+            <div class="flex items-center space-x-1.5">
+              <button
+                onclick={() => { isChangingPath = false; newPath = ''; }}
+                disabled={isSavingPath}
+                class="px-2 py-0.5 rounded border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-[11px] font-medium text-stone-700 dark:text-stone-200 hover:bg-stone-50 dark:hover:bg-stone-700 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onclick={() => saveNewPath()}
+                disabled={isSavingPath || !newPath.trim()}
+                class="flex items-center space-x-1 px-2.5 py-0.5 rounded bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-[11px] font-medium hover:bg-stone-800 dark:hover:bg-white disabled:opacity-50 transition cursor-pointer"
+              >
+                {#if isSavingPath}
+                  <Loader2 class="w-3 h-3 animate-spin" />
+                  <span>Applying...</span>
+                {:else}
+                  <Save class="w-3 h-3" />
+                  <span>Apply</span>
+                {/if}
+              </button>
+            </div>
+          </div>
+        </div>
       {/if}
     </div>
 
-    <p class="text-xs text-stone-600 leading-relaxed">
-      Local folder where downloaded courses, lesson markdown, prompts, tests, and configurations are stored.
-    </p>
-
-    <!-- Active Path Display -->
-    <div class="p-3 rounded-xl bg-stone-50 border border-stone-200 space-y-2">
-      <div class="flex items-center justify-between text-xs text-stone-500">
-        <span class="font-medium text-stone-700">Active Path</span>
-        {#if storageInfo}
-          <span class="text-stone-500">
-            {storageInfo.courseCount} {storageInfo.courseCount === 1 ? 'course' : 'courses'} &bull; {storageInfo.totalSizeFormatted}
-          </span>
-        {/if}
-      </div>
-      <div class="font-mono text-xs text-stone-800 break-all select-all bg-white p-2.5 rounded-lg border border-stone-200 shadow-2xs">
-        {storageInfo?.dataDir || 'Loading...'}
-      </div>
-    </div>
-
-    {#if storageMessage}
-      <div class="flex items-center space-x-2 text-xs p-3 rounded-lg border {storageMessage.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}">
-        {#if storageMessage.type === 'success'}
-          <CheckCircle2 class="w-4 h-4 shrink-0 text-emerald-600" />
-        {:else}
-          <AlertCircle class="w-4 h-4 shrink-0 text-rose-600" />
-        {/if}
-        <span>{storageMessage.text}</span>
-      </div>
-    {/if}
-
-    <!-- Change Directory Form (when editing) -->
-    {#if isChangingPath}
-      <div class="p-4 rounded-xl border border-stone-200 bg-stone-50/60 space-y-3.5">
-        <label for="new-path-input" class="text-xs font-semibold text-stone-800 block">
-          Choose New Data Directory
-        </label>
-        <div class="flex flex-col sm:flex-row gap-2">
-          <input
-            id="new-path-input"
-            type="text"
-            bind:value={newPath}
-            placeholder={storageInfo?.dataDir || '/path/to/data'}
-            class="flex-1 px-3 py-2 rounded-lg border border-stone-200 text-xs font-mono text-stone-900 bg-white placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
-          />
-          <button
-            onclick={chooseFolder}
-            type="button"
-            class="flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition"
-          >
-            <Folder class="w-3.5 h-3.5" />
-            <span>Browse...</span>
-          </button>
+    <!-- Backup & Migration Row -->
+    <div class="p-3 space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center space-x-2">
+          <Archive class="w-3.5 h-3.5 text-stone-600 dark:text-stone-400 shrink-0" />
+          <span class="font-medium text-stone-900 dark:text-stone-100">Backup & Migration</span>
+          <span class="text-[11px] text-stone-400 dark:text-stone-500">Zip/unzip courses and config</span>
         </div>
 
-        <div class="flex items-center space-x-2 pt-1">
+        <div class="flex items-center space-x-1.5">
+          <!-- Hidden file input for restore -->
           <input
-            id="migrate-data-checkbox"
-            type="checkbox"
-            bind:checked={migrateExisting}
-            class="rounded border-stone-300 text-stone-900 focus:ring-stone-900 h-3.5 w-3.5"
+            type="file"
+            accept=".zip,application/zip"
+            bind:this={backupFileInput}
+            onchange={handleBackupFileSelected}
+            class="hidden"
           />
-          <label for="migrate-data-checkbox" class="text-xs text-stone-700 select-none">
-            Copy existing course data, prompts, and settings to the new location
-          </label>
-        </div>
 
-        <div class="flex items-center justify-end space-x-2 pt-2">
           <button
-            onclick={() => { isChangingPath = false; newPath = ''; }}
-            disabled={isSavingPath}
-            class="px-3.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs font-medium text-stone-700 transition"
+            onclick={exportBackup}
+            disabled={isExportingBackup}
+            class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-[11px] font-medium text-stone-700 dark:text-stone-300 disabled:opacity-50 transition cursor-pointer"
           >
-            Cancel
-          </button>
-          <button
-            onclick={() => saveNewPath()}
-            disabled={isSavingPath || !newPath.trim()}
-            class="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 disabled:opacity-50 transition shadow-2xs"
-          >
-            {#if isSavingPath}
-              <Loader2 class="w-3.5 h-3.5 animate-spin" />
-              <span>Updating...</span>
+            {#if isExportingBackup}
+              <Loader2 class="w-3 h-3 animate-spin" />
+              <span>Exporting...</span>
             {:else}
-              <Save class="w-3.5 h-3.5" />
-              <span>Apply Location</span>
+              <Download class="w-3 h-3" />
+              <span>Export .zip</span>
+            {/if}
+          </button>
+
+          <button
+            onclick={triggerImportDialog}
+            disabled={isImportingBackup}
+            class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-[11px] font-medium text-stone-700 dark:text-stone-300 disabled:opacity-50 transition cursor-pointer"
+          >
+            {#if isImportingBackup}
+              <Loader2 class="w-3 h-3 animate-spin" />
+              <span>Restoring...</span>
+            {:else}
+              <Upload class="w-3 h-3" />
+              <span>Restore .zip</span>
             {/if}
           </button>
         </div>
       </div>
-    {/if}
 
-    <!-- Action Bar -->
-    <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
-      <div class="flex items-center space-x-2">
-        <button
-          onclick={openFolder}
-          type="button"
-          class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs text-stone-700 font-medium transition"
-          title="Open directory in Finder, File Explorer, or File Manager"
-        >
-          <FolderOpen class="w-3.5 h-3.5" />
-          <span>Open Folder</span>
-        </button>
-
-        {#if !isChangingPath}
-          <button
-            onclick={chooseFolder}
-            type="button"
-            class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs text-stone-700 font-medium transition"
-          >
-            <Folder class="w-3.5 h-3.5" />
-            <span>Change Location</span>
-          </button>
-        {/if}
-      </div>
-
-      {#if storageInfo?.isCustom}
-        <button
-          onclick={resetStorageToDefault}
-          type="button"
-          class="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-medium text-stone-600 hover:text-stone-900 hover:bg-stone-100 transition"
-        >
-          <RotateCw class="w-3.5 h-3.5" />
-          <span>Reset to Default</span>
-        </button>
+      {#if backupMessage}
+        <div class="flex items-center space-x-1.5 text-[11px] px-2 py-1 rounded border {backupMessage.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200' : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'}">
+          {#if backupMessage.type === 'success'}
+            <CheckCircle2 class="w-3 h-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          {:else}
+            <AlertCircle class="w-3 h-3 shrink-0 text-rose-600 dark:text-rose-400" />
+          {/if}
+          <span>{backupMessage.text}</span>
+        </div>
       {/if}
-    </div>
-
-    <!-- Backup & Migration Section within same card -->
-    <div class="border-t border-stone-100 pt-5 space-y-4">
-
-    {#if backupMessage}
-      <div class="flex items-center space-x-2 text-xs p-3 rounded-lg border {backupMessage.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}">
-        {#if backupMessage.type === 'success'}
-          <CheckCircle2 class="w-4 h-4 shrink-0 text-emerald-600" />
-        {:else}
-          <AlertCircle class="w-4 h-4 shrink-0 text-rose-600" />
-        {/if}
-        <span>{backupMessage.text}</span>
-      </div>
-    {/if}
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-      <!-- Export Box -->
-      <div class="p-4 rounded-xl border border-stone-200 bg-stone-50/50 flex flex-col justify-between space-y-3">
-        <div class="space-y-1">
-          <h3 class="text-xs font-semibold text-stone-900 flex items-center space-x-1.5">
-            <Download class="w-3.5 h-3.5 text-stone-700" />
-            <span>Export Course Backup</span>
-          </h3>
-          <p class="text-[11px] text-stone-500 leading-relaxed">
-            Zip all courses, lessons, prompts, and configurations into a zip.
-          </p>
-        </div>
-
-        <button
-          onclick={exportBackup}
-          disabled={isExportingBackup}
-          class="flex items-center justify-center space-x-1.5 w-full px-4 py-2 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 disabled:opacity-50 transition shadow-2xs"
-        >
-          {#if isExportingBackup}
-            <Loader2 class="w-3.5 h-3.5 animate-spin" />
-            <span>Creating Archive...</span>
-          {:else}
-            <Download class="w-3.5 h-3.5" />
-            <span>Export Data (.zip)</span>
-          {/if}
-        </button>
-      </div>
-
-      <!-- Import Box -->
-      <div class="p-4 rounded-xl border border-stone-200 bg-stone-50/50 flex flex-col justify-between space-y-3">
-        <div class="space-y-1">
-          <h3 class="text-xs font-semibold text-stone-900 flex items-center space-x-1.5">
-            <Upload class="w-3.5 h-3.5 text-stone-700" />
-            <span>Restore Course Archive</span>
-          </h3>
-          <p class="text-[11px] text-stone-500 leading-relaxed">
-            Unzip and import a saved backup directly into your active data directory.
-          </p>
-        </div>
-
-        <!-- Hidden input for file selection -->
-        <input
-          type="file"
-          accept=".zip,application/zip"
-          bind:this={backupFileInput}
-          onchange={handleBackupFileSelected}
-          class="hidden"
-        />
-
-        <button
-          onclick={triggerImportDialog}
-          disabled={isImportingBackup}
-          class="flex items-center justify-center space-x-1.5 w-full px-4 py-2 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-stone-800 text-xs font-medium disabled:opacity-50 transition"
-        >
-          {#if isImportingBackup}
-            <Loader2 class="w-3.5 h-3.5 animate-spin" />
-            <span>Restoring Data...</span>
-          {:else}
-            <Upload class="w-3.5 h-3.5" />
-            <span>Restore from Backup (.zip)</span>
-          {/if}
-        </button>
-      </div>
-    </div>
-  </div>
-</section>
-
-  <!-- LLM Configuration Section -->
-  <section class="rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs space-y-5">
-    <div class="flex items-center space-x-2 pb-3 border-b border-stone-100">
-      <Server class="w-4 h-4 text-stone-700" />
-      <h2 class="text-sm font-semibold text-stone-900">LLM Provider Configuration</h2>
-    </div>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div class="space-y-1.5">
-        <label for="provider-select" class="text-xs font-medium text-stone-700">Provider</label>
-        <select
-          id="provider-select"
-          bind:value={provider}
-          class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 bg-white focus:outline-none focus:ring-1 focus:ring-stone-900"
-        >
-          <option value="openai_compatible">OpenAI-Compatible (Ollama, vLLM, LMStudio)</option>
-          <option value="gemini">Google Gemini (via OpenAI compatibility endpoint)</option>
-          <option value="ollama">Ollama Local</option>
-        </select>
-      </div>
-
-      <div class="space-y-1.5">
-        <label for="base-url-input" class="text-xs font-medium text-stone-700">Base URL</label>
-        <input
-          id="base-url-input"
-          type="text"
-          bind:value={baseUrl}
-          placeholder="http://localhost:11434/v1"
-          class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
-        />
-      </div>
-
-      <div class="space-y-1.5">
-        <label for="api-key-input" class="text-xs font-medium text-stone-700">API Key (optional for local models)</label>
-        <input
-          id="api-key-input"
-          type="password"
-          bind:value={apiKey}
-          placeholder={hasStoredApiKey ? 'Key saved on server (leave blank to keep)' : 'sk-...'}
-          class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
-        />
-      </div>
-
-      <div class="space-y-1.5">
-        <label for="auth-type-select" class="text-xs font-medium text-stone-700 flex items-center justify-between">
-          <span>Auth Header Format</span>
-          <span class="text-[10px] text-stone-400 font-mono">Authorization: Bearer</span>
-        </label>
-        <select
-          id="auth-type-select"
-          bind:value={authHeaderType}
-          class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 bg-white focus:outline-none focus:ring-1 focus:ring-stone-900"
-        >
-          <option value="bearer">Authorization: Bearer &#123;key&#125; (Standard OpenAI / OpenRouter)</option>
-          <option value="api_key">api-key: &#123;key&#125; (Azure / Custom OpenAPI)</option>
-          <option value="both">Both (Authorization: Bearer + api-key)</option>
-        </select>
-      </div>
-
-      <div class="space-y-1.5">
-        <label for="model-name-input" class="text-xs font-medium text-stone-700">Model Name (optional)</label>
-        <input
-          id="model-name-input"
-          type="text"
-          bind:value={model}
-          placeholder="e.g. gpt-4o-mini, llama3 (or blank if server default)"
-          class="w-full px-3 py-2 rounded-lg border border-stone-200 text-xs text-stone-900 placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-stone-900"
-        />
-      </div>
-    </div>
-
-    <!-- Connection Test Status -->
-    {#if connectionTestResult}
-      <div class="flex items-center space-x-2 text-xs p-3 rounded-lg border {connectionTestResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}">
-        {#if connectionTestResult.success}
-          <CheckCircle2 class="w-4 h-4 shrink-0 text-emerald-600" />
-        {:else}
-          <AlertCircle class="w-4 h-4 shrink-0 text-rose-600" />
-        {/if}
-        <span>{connectionTestResult.message}</span>
-      </div>
-    {/if}
-
-    {#if saveMessage}
-      <p class="text-xs text-emerald-600 font-medium">{saveMessage}</p>
-    {/if}
-
-    <div class="flex items-center justify-between pt-2">
-      <button
-        onclick={testConnection}
-        disabled={isTestingConnection}
-        class="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg border border-stone-200 bg-white hover:bg-stone-50 text-xs text-stone-700 font-medium transition"
-      >
-        {#if isTestingConnection}
-          <Loader2 class="w-3.5 h-3.5 animate-spin" />
-          <span>Testing...</span>
-        {:else}
-          <span>Test Connection</span>
-        {/if}
-      </button>
-
-      <button
-        onclick={saveSettings}
-        class="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-stone-900 text-white text-xs font-medium hover:bg-stone-800 transition shadow-2xs"
-      >
-        <Save class="w-3.5 h-3.5" />
-        <span>Save Settings</span>
-      </button>
     </div>
   </section>
 
-  <!-- Course Maintenance Section -->
-  <section class="rounded-2xl border border-stone-200 bg-white p-6 shadow-2xs space-y-4">
-    <div class="flex items-center space-x-2 pb-3 border-b border-stone-100">
-      <FolderKanban class="w-4 h-4 text-stone-700" />
-      <h2 class="text-sm font-semibold text-stone-900">Course Corruption & Image Compacting</h2>
-    </div>
+  <!-- Panel 2: LLM Configuration & Maintenance -->
+  <section class="rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-2xs divide-y divide-stone-100 dark:divide-stone-800 text-xs">
+    <!-- LLM Provider Header & Inputs -->
+    <div class="p-3 space-y-2">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <Server class="w-3.5 h-3.5 text-stone-600 dark:text-stone-400 shrink-0" />
+          <span class="font-medium text-stone-900 dark:text-stone-100">LLM Provider Configuration</span>
+        </div>
 
-    <p class="text-xs text-stone-600 leading-relaxed">
-      Normally these are NOT needed. Only do if course markdowns got corrupted. Trigger a complete re-parse of all raw course HTML packages in <code>data/courses/&lt;course&gt;/_backup/</code> to update markdown lessons, refresh assets, and synchronize manifests.
-    </p>
+        <div class="flex items-center space-x-1.5">
+          <button
+            onclick={testConnection}
+            disabled={isTestingConnection}
+            class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-[11px] text-stone-700 dark:text-stone-300 font-medium transition cursor-pointer"
+          >
+            {#if isTestingConnection}
+              <Loader2 class="w-3 h-3 animate-spin" />
+              <span>Testing...</span>
+            {:else}
+              <span>Test Connection</span>
+            {/if}
+          </button>
 
-    {#if reparseResult}
-      <div class="text-xs p-3 rounded-lg bg-stone-50 border border-stone-200 text-stone-800">
-        {reparseResult}
+          <button
+            onclick={saveSettings}
+            class="flex items-center space-x-1 px-2.5 py-1 rounded bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-[11px] font-medium hover:bg-stone-800 dark:hover:bg-white transition cursor-pointer"
+          >
+            <Save class="w-3 h-3" />
+            <span>Save</span>
+          </button>
+        </div>
       </div>
-    {/if}
 
-    <button
-      onclick={reparseAllCourses}
-      disabled={isReparsing}
-      class="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-medium transition"
-    >
-      {#if isReparsing}
-        <Loader2 class="w-3.5 h-3.5 animate-spin" />
-        <span>Re-indexing Courses...</span>
-      {:else}
-        <RotateCw class="w-3.5 h-3.5" />
-        <span>Re-parse All Courses</span>
+      {#if connectionTestResult}
+        <div class="flex items-center space-x-1.5 text-[11px] px-2 py-1 rounded border {connectionTestResult.success ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200' : 'bg-rose-50 dark:bg-rose-950/60 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200'}">
+          {#if connectionTestResult.success}
+            <CheckCircle2 class="w-3 h-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          {:else}
+            <AlertCircle class="w-3 h-3 shrink-0 text-rose-600 dark:text-rose-400" />
+          {/if}
+          <span>{connectionTestResult.message}</span>
+        </div>
       {/if}
-    </button>
 
-    <div class="flex items-center justify-between gap-3 pt-2 border-t border-stone-100">
-      <p class="text-xs text-stone-600 leading-relaxed">
-        Compress oversized course images: anything wider than 512px is resized to 512px and converted
-        to JPEG; oversized markdown images get a 50% width spec.
-      </p>
-      <button
-        onclick={compressCourseImages}
-        disabled={isCompressingImages}
-        class="flex items-center space-x-1.5 px-4 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-medium transition shrink-0"
-      >
-        {#if isCompressingImages}
-          <Loader2 class="w-3.5 h-3.5 animate-spin" />
-          <span>Compressing...</span>
-        {:else}
-          <ImageDown class="w-3.5 h-3.5" />
-          <span>Compress Course Images</span>
-        {/if}
-      </button>
+      {#if saveMessage}
+        <p class="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">{saveMessage}</p>
+      {/if}
+
+      <!-- Dense Inputs Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-0.5">
+        <div>
+          <label for="provider-select" class="text-[11px] font-medium text-stone-600 dark:text-stone-400 block mb-0.5">Provider</label>
+          <select
+            id="provider-select"
+            bind:value={provider}
+            class="w-full px-2 py-1 rounded border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-stone-100 bg-stone-50/50 dark:bg-stone-950 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
+          >
+            <option value="openai_compatible">OpenAI-Compatible (Ollama, vLLM, LMStudio)</option>
+            <option value="gemini">Google Gemini (via OpenAI Endpoint)</option>
+            <option value="ollama">Ollama Local</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="base-url-input" class="text-[11px] font-medium text-stone-600 dark:text-stone-400 block mb-0.5">Base URL</label>
+          <input
+            id="base-url-input"
+            type="text"
+            bind:value={baseUrl}
+            placeholder="http://localhost:11434/v1"
+            class="w-full px-2 py-1 rounded border border-stone-200 dark:border-stone-700 text-xs font-mono text-stone-900 dark:text-stone-100 bg-stone-50/50 dark:bg-stone-950 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
+          />
+        </div>
+
+        <div>
+          <label for="model-name-input" class="text-[11px] font-medium text-stone-600 dark:text-stone-400 block mb-0.5">Model Name (optional)</label>
+          <input
+            id="model-name-input"
+            type="text"
+            bind:value={model}
+            placeholder="gpt-4o-mini, llama3"
+            class="w-full px-2 py-1 rounded border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-stone-100 bg-stone-50/50 dark:bg-stone-950 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
+          />
+        </div>
+
+        <div>
+          <label for="auth-type-select" class="text-[11px] font-medium text-stone-600 dark:text-stone-400 block mb-0.5">Auth Header</label>
+          <select
+            id="auth-type-select"
+            bind:value={authHeaderType}
+            class="w-full px-2 py-1 rounded border border-stone-200 dark:border-stone-700 text-xs text-stone-900 dark:text-stone-100 bg-stone-50/50 dark:bg-stone-950 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
+          >
+            <option value="bearer">Bearer &#123;key&#125; (Standard)</option>
+            <option value="api_key">api-key: &#123;key&#125; (Azure)</option>
+            <option value="both">Both (Bearer + api-key)</option>
+          </select>
+        </div>
+
+        <div class="sm:col-span-2">
+          <label for="api-key-input" class="text-[11px] font-medium text-stone-600 dark:text-stone-400 block mb-0.5">
+            API Key <span class="text-[10px] text-stone-400 dark:text-stone-500">(optional for local models)</span>
+          </label>
+          <input
+            id="api-key-input"
+            type="password"
+            bind:value={apiKey}
+            placeholder={hasStoredApiKey ? 'Saved on server (leave blank to keep)' : 'sk-...'}
+            class="w-full px-2 py-1 rounded border border-stone-200 dark:border-stone-700 text-xs font-mono text-stone-900 dark:text-stone-100 bg-stone-50/50 dark:bg-stone-950 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
+          />
+        </div>
+      </div>
     </div>
 
-    {#if compressImagesResult}
-      <div class="text-xs p-3 rounded-lg bg-stone-50 border border-stone-200 text-stone-800">
-        {compressImagesResult}
+    <!-- Maintenance Row -->
+    <div class="p-3 space-y-2">
+      <div class="flex items-center space-x-2">
+        <FolderKanban class="w-3.5 h-3.5 text-stone-600 dark:text-stone-400 shrink-0" />
+        <span class="font-medium text-stone-900 dark:text-stone-100">Ingestion & Maintenance</span>
+        <span class="text-[11px] text-stone-400 dark:text-stone-500">Only needed if files were damaged</span>
       </div>
-    {/if}
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+        <div class="flex items-center justify-between p-2 rounded border border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-950 gap-2">
+          <div class="text-[11px] text-stone-600 dark:text-stone-400 leading-tight">
+            Re-parse all raw HTML in <code class="text-[10px]">_backup/</code>
+          </div>
+          <button
+            onclick={reparseAllCourses}
+            disabled={isReparsing}
+            class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-[11px] font-medium text-stone-700 dark:text-stone-300 disabled:opacity-50 transition cursor-pointer shrink-0"
+          >
+            {#if isReparsing}
+              <Loader2 class="w-3 h-3 animate-spin" />
+              <span>Parsing...</span>
+            {:else}
+              <RotateCw class="w-3 h-3" />
+              <span>Re-parse All</span>
+            {/if}
+          </button>
+        </div>
+
+        <div class="flex items-center justify-between p-2 rounded border border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-950 gap-2">
+          <div class="text-[11px] text-stone-600 dark:text-stone-400 leading-tight">
+            Compress course images (&gt;512px)
+          </div>
+          <button
+            onclick={compressCourseImages}
+            disabled={isCompressingImages}
+            class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-[11px] font-medium text-stone-700 dark:text-stone-300 disabled:opacity-50 transition shrink-0 cursor-pointer"
+          >
+            {#if isCompressingImages}
+              <Loader2 class="w-3 h-3 animate-spin" />
+              <span>Compressing...</span>
+            {:else}
+              <ImageDown class="w-3 h-3" />
+              <span>Compress</span>
+            {/if}
+          </button>
+        </div>
+      </div>
+
+      {#if reparseResult}
+        <div class="text-[11px] px-2 py-1 rounded bg-stone-50 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-stone-700 dark:text-stone-300">
+          {reparseResult}
+        </div>
+      {/if}
+
+      {#if compressImagesResult}
+        <div class="text-[11px] px-2 py-1 rounded bg-stone-50 dark:bg-stone-950 border border-stone-200 dark:border-stone-800 text-stone-700 dark:text-stone-300">
+          {compressImagesResult}
+        </div>
+      {/if}
+    </div>
   </section>
 </main>
+

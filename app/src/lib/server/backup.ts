@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import AdmZip from 'adm-zip';
+import { createMemoryArchive, openMemoryArchive, CompressionLevel } from 'zip-bun';
 import { getDataDir, getCoursesDir, safeJoin } from './paths';
 
 export interface RestoreResult {
@@ -19,31 +19,43 @@ export function createDataBackupZip(): {
   fileCount: number;
 } {
   const dataDir = getDataDir();
-  const zip = new AdmZip();
+  const writer = createMemoryArchive();
 
   let fileCount = 0;
   let courseCount = 0;
 
+  const addTree = (absDir: string, relPrefix: string): void => {
+    for (const entry of fs.readdirSync(absDir, { withFileTypes: true })) {
+      const absPath = path.join(absDir, entry.name);
+      const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        addTree(absPath, relPath);
+      } else if (entry.isFile()) {
+        writer.addFile(relPath, fs.readFileSync(absPath), CompressionLevel.DEFAULT);
+        fileCount++;
+      }
+    }
+  };
+
   if (fs.existsSync(dataDir)) {
-    const entries = fs.readdirSync(dataDir, { withFileTypes: true });
-    for (const entry of entries) {
+    for (const entry of fs.readdirSync(dataDir, { withFileTypes: true })) {
       const fullPath = path.join(dataDir, entry.name);
       if (entry.isDirectory()) {
-        zip.addLocalFolder(fullPath, entry.name);
+        addTree(fullPath, entry.name);
         if (entry.name === 'courses') {
           const courses = fs.readdirSync(fullPath, { withFileTypes: true });
           courseCount = courses.filter((c) => c.isDirectory()).length;
         }
       } else if (entry.isFile()) {
-        zip.addLocalFile(fullPath);
+        writer.addFile(entry.name, fs.readFileSync(fullPath), CompressionLevel.DEFAULT);
+        fileCount++;
       }
     }
-    fileCount = zip.getEntries().filter((e) => !e.isDirectory).length;
   }
 
   const today = new Date().toISOString().split('T')[0];
   const filename = `ilc-study-tool-backup-${today}.zip`;
-  const buffer = zip.toBuffer();
+  const buffer = Buffer.from(writer.finalizeToMemory());
 
   return { buffer, filename, courseCount, fileCount };
 }
@@ -56,21 +68,25 @@ export function restoreDataBackupZip(buffer: Buffer, customTargetDir?: string): 
   const targetDir = customTargetDir || getDataDir();
   fs.mkdirSync(targetDir, { recursive: true });
 
-  const zip = new AdmZip(buffer);
-  const zipEntries = zip.getEntries();
-
+  const reader = openMemoryArchive(buffer);
   let filesRestored = 0;
 
-  for (const entry of zipEntries) {
-    if (entry.isDirectory) continue;
+  try {
+    const fileCount = reader.getFileCount();
+    for (let i = 0; i < fileCount; i++) {
+      const info = reader.getFileByIndex(i);
+      if (info.directory) continue;
 
-    // Defend against Zip Slip
-    const entryName = entry.entryName.replace(/^[/\\]+/, '');
-    const destinationPath = safeJoin(targetDir, entryName);
+      // Defend against Zip Slip
+      const entryName = info.filename.replace(/^[/\\]+/, '');
+      const destinationPath = safeJoin(targetDir, entryName);
 
-    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-    fs.writeFileSync(destinationPath, entry.getData());
-    filesRestored++;
+      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+      fs.writeFileSync(destinationPath, Buffer.from(reader.extractFile(i)));
+      filesRestored++;
+    }
+  } finally {
+    reader.close();
   }
 
   const coursesDir = path.join(targetDir, 'courses');
