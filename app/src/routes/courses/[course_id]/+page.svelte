@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { page } from '$app/stores';
   import Header from '$lib/components/Header.svelte';
   import LessonSelector from '$lib/components/LessonSelector.svelte';
@@ -119,7 +120,7 @@
 
   async function loadPrompts() {
     try {
-      const res = await fetch('/api/prompts');
+      const res = await apiFetch('/api/prompts');
       if (res.ok) {
         const data = await res.json();
         const map: Record<string, string> = {};
@@ -136,7 +137,7 @@
   async function loadCourse(selectTargetLessonId?: string) {
     isLoadingCourse = true;
     try {
-      const res = await fetch(`/api/courses/${courseId}`);
+      const res = await apiFetch(`/api/courses/${courseId}`);
       if (res.ok) {
         const data = await res.json();
         course = data.course;
@@ -156,7 +157,7 @@
     selectedLessonId = lessonId;
     isLoadingLesson = true;
     try {
-      const res = await fetch(`/api/courses/${courseId}/${lessonId}`);
+      const res = await apiFetch(`/api/courses/${courseId}/${lessonId}`);
       if (res.ok) {
         const data: LessonContentBundle = await res.json();
         lessonBundle = data;
@@ -237,7 +238,7 @@
     );
 
     try {
-      const res = await fetch(`/api/courses/${courseId}/${selectedLessonId}`, {
+      const res = await apiFetch(`/api/courses/${courseId}/${selectedLessonId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -266,7 +267,7 @@
 
     try {
       const targetTab = activeTab === 'lesson' ? 'lesson' : activeVersions[activeTab];
-      const res = await fetch(`/api/courses/${courseId}/${selectedLessonId}`, {
+      const res = await apiFetch(`/api/courses/${courseId}/${selectedLessonId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -283,7 +284,7 @@
           saveSuccessMessage = '';
         }, 2000);
         // Silently reload lesson bundle to sync versions
-        const reloadRes = await fetch(`/api/courses/${courseId}/${selectedLessonId}`);
+        const reloadRes = await apiFetch(`/api/courses/${courseId}/${selectedLessonId}`);
         if (reloadRes.ok) {
           lessonBundle = await reloadRes.json();
         }
@@ -352,7 +353,7 @@
       console.log(`- Mode: ${asNewVersion ? 'Save as new version' : 'Overwrite current'}`);
       console.log(`- System Prompt: "${activeSystemPrompt.slice(0, 120)}..."`);
 
-      const res = await fetch('/api/queue', {
+      const res = await apiFetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -399,7 +400,7 @@
 
     isQueueingMissing = true;
     try {
-      const res = await fetch('/api/queue', {
+      const res = await apiFetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -471,7 +472,7 @@
       console.log(`- User Query: "${query}"`);
       console.log(`- User Prompt Length: ${userPrompt.length} characters`);
 
-      const res = await fetch('/api/llm', {
+      const res = await apiFetch('/api/llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createMemoryArchive, openMemoryArchive, CompressionLevel } from 'zip-bun';
+import { zipSync, unzipSync } from 'fflate';
 import { getDataDir, getCoursesDir, safeJoin } from './paths';
 
 export interface RestoreResult {
@@ -19,7 +19,8 @@ export function createDataBackupZip(): {
   fileCount: number;
 } {
   const dataDir = getDataDir();
-  const writer = createMemoryArchive();
+  // fflate: fast pure-JS zip that also works inside the compiled sidecar.
+  const files: Record<string, Uint8Array> = {};
 
   let fileCount = 0;
   let courseCount = 0;
@@ -31,7 +32,7 @@ export function createDataBackupZip(): {
       if (entry.isDirectory()) {
         addTree(absPath, relPath);
       } else if (entry.isFile()) {
-        writer.addFile(relPath, fs.readFileSync(absPath), CompressionLevel.DEFAULT);
+        files[relPath] = new Uint8Array(fs.readFileSync(absPath));
         fileCount++;
       }
     }
@@ -47,7 +48,7 @@ export function createDataBackupZip(): {
           courseCount = courses.filter((c) => c.isDirectory()).length;
         }
       } else if (entry.isFile()) {
-        writer.addFile(entry.name, fs.readFileSync(fullPath), CompressionLevel.DEFAULT);
+        files[entry.name] = new Uint8Array(fs.readFileSync(fullPath));
         fileCount++;
       }
     }
@@ -55,7 +56,7 @@ export function createDataBackupZip(): {
 
   const today = new Date().toISOString().split('T')[0];
   const filename = `ilc-study-tool-backup-${today}.zip`;
-  const buffer = Buffer.from(writer.finalizeToMemory());
+  const buffer = Buffer.from(zipSync(files, { level: 6 }));
 
   return { buffer, filename, courseCount, fileCount };
 }
@@ -68,25 +69,19 @@ export function restoreDataBackupZip(buffer: Buffer, customTargetDir?: string): 
   const targetDir = customTargetDir || getDataDir();
   fs.mkdirSync(targetDir, { recursive: true });
 
-  const reader = openMemoryArchive(buffer);
+  const entries = unzipSync(new Uint8Array(buffer));
   let filesRestored = 0;
 
-  try {
-    const fileCount = reader.getFileCount();
-    for (let i = 0; i < fileCount; i++) {
-      const info = reader.getFileByIndex(i);
-      if (info.directory) continue;
+  for (const [entryName, data] of Object.entries(entries)) {
+    if (entryName.endsWith('/')) continue;
 
-      // Defend against Zip Slip
-      const entryName = info.filename.replace(/^[/\\]+/, '');
-      const destinationPath = safeJoin(targetDir, entryName);
+    // Defend against Zip Slip
+    const cleanName = entryName.replace(/^[/\\]+/, '');
+    const destinationPath = safeJoin(targetDir, cleanName);
 
-      fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
-      fs.writeFileSync(destinationPath, Buffer.from(reader.extractFile(i)));
-      filesRestored++;
-    }
-  } finally {
-    reader.close();
+    fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+    fs.writeFileSync(destinationPath, Buffer.from(data));
+    filesRestored++;
   }
 
   const coursesDir = path.join(targetDir, 'courses');

@@ -6,6 +6,7 @@ import { buildDocDefinition, buildFilename } from './document';
 import { compileMarkdownContent } from './markdown/blocks';
 import { compileQuizContent } from './quiz';
 import type { CompileContext, ExportTab, PdfExportOptions } from './types';
+import { isTauriEnvironment } from '$lib/api';
 
 /**
  * Vector PDF export engine.
@@ -87,12 +88,8 @@ export async function exportDocumentToPdf(options: PdfExportOptions): Promise<vo
 // plain browser download, whichever the host supports.
 // ---------------------------------------------------------------------------
 
-function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
-
 async function savePdfBlob(blob: Blob, filename: string): Promise<'cancelled' | string | null> {
-  if (isTauri()) {
+  if (isTauriEnvironment()) {
     const [{ save }, { invoke }] = await Promise.all([
       import('@tauri-apps/plugin-dialog'),
       import('@tauri-apps/api/core')

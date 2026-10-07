@@ -1,4 +1,4 @@
-import { isTauriEnvironment } from '$lib/api';
+import { apiFetch, isTauriEnvironment } from '$lib/api';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -45,7 +45,7 @@ class ThemeManager {
 
     // Persist via HTTP API to ensure settings.json is updated in all environments
     try {
-      await fetch('/api/settings/theme', {
+      await apiFetch('/api/settings/theme', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ theme: mode })
@@ -88,7 +88,7 @@ class ThemeManager {
         } catch (_) {}
       }
 
-      const res = await fetch('/api/settings/theme');
+      const res = await apiFetch('/api/settings/theme');
       if (res.ok) {
         const data = await res.json();
         if (data?.theme && ['light', 'dark', 'system'].includes(data.theme)) {

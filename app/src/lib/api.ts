@@ -11,34 +11,20 @@ export function isTauriEnvironment(): boolean {
 
 export function getApiBaseUrl(): string {
   if (typeof window === 'undefined') return '';
-  // In dev (localhost:5173), Vite dev server handles /api proxying
+  // In dev (localhost:5173), the Vite/SvelteKit dev server handles /api itself
   if (window.location.port === '5173') return '';
-  // In Tauri packaged production app, point to local Bun backend
+  // In the packaged Tauri app, point to the local Bun backend sidecar
   if (isTauriEnvironment()) {
     return `http://127.0.0.1:${BACKEND_PORT}`;
   }
   return '';
 }
 
-let interceptorInitialized = false;
-
-export function initApiInterceptor(): void {
-  if (typeof window === 'undefined' || interceptorInitialized) return;
-  const baseUrl = getApiBaseUrl();
-  if (!baseUrl) return;
-
-  interceptorInitialized = true;
-  const originalFetch = window.fetch;
-  window.fetch = (function (input: RequestInfo | URL, init?: RequestInit) {
-    if (typeof input === 'string') {
-      if (input.startsWith('/api/')) {
-        input = `${baseUrl}${input}`;
-      }
-    } else if (input instanceof URL) {
-      if (input.pathname.startsWith('/api/')) {
-        input = new URL(`${baseUrl}${input.pathname}${input.search}`);
-      }
-    }
-    return originalFetch(input, init);
-  }) as any;
+/**
+ * Typed fetch for the backend API. Applies the correct base URL for the
+ * current environment (dev server vs packaged Tauri sidecar) so call sites
+ * never need environment branching — and no global fetch patching is needed.
+ */
+export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  return fetch(`${getApiBaseUrl()}${path}`, init);
 }

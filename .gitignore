@@ -10,3 +10,7 @@ app/build/
 data/
 tauri/target/
 tauri/server
+tauri/server.exe
+tauri/server-*.exe
+*.data.zip
+data/**/*.zip

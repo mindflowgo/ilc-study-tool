@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { onMount, onDestroy } from 'svelte';
   import {
     Sparkles,
@@ -83,7 +84,7 @@
 
   async function sendAction(action: 'pause' | 'resume' | 'cancel' | 'retry') {
     try {
-      await fetch('/api/queue', {
+      await apiFetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, courseId })
@@ -97,7 +98,7 @@
   async function enqueueMissing() {
     if (!courseId) return;
     try {
-      await fetch('/api/queue', {
+      await apiFetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

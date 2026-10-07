@@ -86,7 +86,7 @@ export class TurndownConverter {
     const cleanedMd = mdBody.replace(/\n{4,}/g, '\n\n');
 
     // Create YAML frontmatter
-    const yamlHeader = `---\n${(globalThis as any).Bun.YAML.stringify(frontmatter)}---\n\n`;
+    const yamlHeader = `---\n${(globalThis as any).Bun.YAML.stringify(frontmatter).replace(/\n?$/, '\n')}---\n\n`;
 
     return yamlHeader + cleanedMd;
   }

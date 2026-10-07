@@ -3,6 +3,7 @@
   import katex from 'katex';
   import DOMPurify from 'dompurify';
   import { getApiBaseUrl } from '$lib/api';
+  import { parseCssImageSpec, isIconImage } from '$lib/markdown/imageSpec';
 
   interface Props {
     markdown: string;
@@ -24,67 +25,12 @@
       .replace(/'/g, '&#39;');
   }
 
-  interface ImageSpec {
-    alt: string;
-    width: string | null;
-    height: string | null;
-    isCustom: boolean;
-  }
-
-  function parseImageSpec(rawText: string): ImageSpec {
-    const pipeIndex = rawText.lastIndexOf('|');
-    if (pipeIndex === -1) {
-      return { alt: rawText.trim(), width: null, height: null, isCustom: false };
-    }
-
-    const alt = rawText.slice(0, pipeIndex).trim();
-    const spec = rawText.slice(pipeIndex + 1).trim().toLowerCase();
-
-    let width: string | null = null;
-    let height: string | null = null;
-
-    if (spec === 'xs' || spec === 'thumb') width = '160px';
-    else if (spec === 'sm' || spec === 'small') width = '280px';
-    else if (spec === 'md' || spec === 'medium') width = '480px';
-    else if (spec === 'lg' || spec === 'large') width = '720px';
-    else if (spec === 'full' || spec === 'xl') width = '100%';
-    else if (/^(\d+(?:px|%|rem)?)\s*x\s*(\d+(?:px|%|rem)?)$/.test(spec)) {
-      const m = spec.match(/^(\d+(?:px|%|rem)?)\s*x\s*(\d+(?:px|%|rem)?)$/);
-      if (m) {
-        width = m[1].endsWith('%') || m[1].endsWith('px') || m[1].endsWith('rem') ? m[1] : m[1] + 'px';
-        height = m[2].endsWith('%') || m[2].endsWith('px') || m[2].endsWith('rem') ? m[2] : m[2] + 'px';
-      }
-    } else {
-      const wm = spec.match(/\b(?:width|w)=([0-9]+(?:%|px|rem)?)/i);
-      const hm = spec.match(/\b(?:height|h)=([0-9]+(?:%|px|rem)?)/i);
-      if (wm) {
-        width = wm[1].endsWith('%') || wm[1].endsWith('px') || wm[1].endsWith('rem') ? wm[1] : wm[1] + 'px';
-      }
-      if (hm) {
-        height = hm[1].endsWith('%') || hm[1].endsWith('px') || hm[1].endsWith('rem') ? hm[1] : hm[1] + 'px';
-      }
-      if (!width && !height) {
-        if (/^\d+(?:%|px|rem)$/.test(spec)) {
-          width = spec;
-        } else if (/^\d+$/.test(spec)) {
-          width = spec + 'px';
-        }
-      }
-    }
-
-    return { alt, width, height, isCustom: Boolean(width || height) };
-  }
-
   function renderCustomImage(href: string, text: string | null | undefined, title?: string | null): string {
     const rawText = text || '';
-    const spec = parseImageSpec(rawText);
+    const spec = parseCssImageSpec(rawText);
     const cleanAlt = spec.alt;
 
-    const isIcon =
-      href.includes('/assets/icons/') ||
-      href.includes('/icons/') ||
-      (href.endsWith('.svg') && !spec.isCustom && !href.includes('/img/')) ||
-      /\b(icon|badge|button)\b/i.test(cleanAlt);
+    const isIcon = isIconImage(href, cleanAlt, spec.isCustom);
 
     if (isIcon) {
       let iconStyle = '';

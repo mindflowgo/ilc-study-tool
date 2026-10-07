@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { Upload, X, FileArchive, CheckCircle2, AlertCircle, Loader2, Plus, RefreshCw, Sparkles } from 'lucide-svelte';
 
   interface Props {
@@ -85,7 +86,7 @@
     }
 
     try {
-      const res = await fetch('/api/parse', {
+      const res = await apiFetch('/api/parse', {
         method: 'POST',
         body: formData
       });
@@ -101,7 +102,7 @@
       if (autoGenerateAI) {
         try {
           const localConfig = getLocalLLMConfig();
-          await fetch('/api/queue', {
+          await apiFetch('/api/queue', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

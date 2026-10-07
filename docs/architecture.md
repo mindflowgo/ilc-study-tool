@@ -199,7 +199,7 @@ The UI provides clean pill buttons (`[ v1 ] [ v2 ] [ + New ]`) allowing students
 ## 4. Extraction & Ingestion Pipeline
 
 The Bun extraction pipeline (`src/lib/parser/`):
-1. **Archive Inspector**: Reads `.zip` files from `data/courses/<course_id>/_backup/`.
+1. **Archive Inspector**: Reads `.zip` files from `data/courses/<course_id>/_backup/` using **`fflate`** — a fast pure-JS zip codec chosen because it survives `bun build --compile` (native zip libs like `zip-bun` JIT-compile C bindings at runtime and crash inside compiled binaries; `adm-zip` compiles but is 5-10x slower).
 2. **Asset Pipeline**:
    - Extracts images (`.jpg`, `.png`, `.svg`) to `data/courses/<course_id>/assets/img/`.
    - Extracts locker documents and PDFs to `data/courses/<course_id>/assets/locker_docs/`.
@@ -213,8 +213,13 @@ The Bun extraction pipeline (`src/lib/parser/`):
 4. **Turndown Markdown Converter**:
    - Uses `turndown` + `turndown-plugin-gfm` to generate crisp Markdown.
    - Preserves tables, callouts, lists, and KaTeX mathematical notation.
+   - YAML frontmatter is written with the **`Bun.YAML`** runtime builtin (parse + stringify; note: `stringify` emits flow style with no trailing newline, so serializers append `\n` before the closing `---`).
 5. **Study Suite Synthesizer**:
    - Generates initial high-yield `summary.md`, `cheatsheet.md`, and `test.md` aligned with the Ontario curriculum expectations.
+6. **Image Optimizer** (`src/lib/parser/imageOptimizer.ts`, runs at the end of every ingest):
+   - Any raster image wider than **512px** is resized (aspect preserved) and re-encoded as **JPEG q82** via the **`Bun.Image`** runtime builtin — no native npm dependency, so it works inside the compiled sidecar binary.
+   - Markdown references are rewritten to the new `.jpg` filenames, Pandoc `{width=…}` attributes are normalized to pipe syntax, and any image that would display wider than 50% of the reading column gets an explicit `|50%` spec.
+   - Also exposed via `POST /api/maintenance/compress-images` (Settings → "Compress Course Images") and `bun run scripts/compress_course_images.ts`.
 
 ---
 
@@ -252,6 +257,31 @@ The project root coordinates both the SvelteKit 5 web app and Tauri v2 desktop a
 - `bun run build`: Typechecks and builds production bundles via SvelteKit.
 - `bun run parse`: Executes the Bun ingestion engine on `data/courses/` archives.
 - `bun run tauri:dev`: Builds the SvelteKit app and launches the native Tauri v2 macOS desktop window.
+- `bun run check`: App svelte-check **plus** `tsc --noEmit` over `server/index.ts` and shared server modules (root `tsconfig.json`, `@types/bun`) — a broken sidecar can never pass CI.
+- `bun run test`: Sidecar API contract tests (`scripts/api-contract.ts`) plus the PDF pipeline smoke test.
+- `bun run server:compile`: Produces the standalone sidecar binary `tauri/server` (`.exe` on Windows) via `bun build --compile`.
+- `bun run tauri:build:win` / `tauri:build:mac`: Platform bundles (`--bundles nsis` / `dmg`); `bundle.resources: ["server*"]` picks up whichever binary name the platform produced.
+
+### 7.1 Backend Sidecar & the Single API Layer
+Packaged desktop builds have no SvelteKit server, and the dev/web app has no compiled sidecar — both serve the **same HTTP API from one implementation**:
+- **`app/src/lib/server/api.ts`** exports a framework-agnostic `handleApiRequest(req, url) → Response` covering every endpoint (courses, lessons, assets, queue, prompts, LLM, parse/ingest, course-docs, backups, storage/theme settings, image compression). It is the *only* place endpoint logic lives.
+- **SvelteKit side**: a single catch-all adapter (`src/routes/api/[...path]/+server.ts`, 3 lines per verb) delegates to the shared handler during `bun run dev` and web builds.
+- **Sidecar side**: `server/index.ts` compiles to a standalone executable (`tauri/server` / `server.exe`) and delegates to the same handler, adding only the loopback transport, CORS for Tauri webview origins, and SPA static serving. If its port is already owned by another instance it exits cleanly instead of crashing.
+- **Frontend**: `apiFetch(path, init)` (`app/src/lib/api.ts`) applies the environment base URL (dev server vs `http://127.0.0.1:3182`) at every call site. The old global `window.fetch` monkey-patch (`initApiInterceptor`) is gone; `isTauriEnvironment()` is the single environment detection export.
+- **Compiled-binary-safe dependencies only**: `Bun.Image` (compression), `Bun.YAML` (frontmatter), `fflate` (zip). Native npm modules (sharp, zip-bun) cannot load inside `bun build --compile` executables and must not be added to this path.
+- **Hardened spawn** (`tauri/src/lib.rs`): per-platform binary lookup (`server`/`server.exe` in resources and beside the executable, bun fallback including `%USERPROFILE%\.bun\bin\bun.exe`), stdout/stderr captured to `<data_dir>/backend.log`, spawn failures logged, and the main window is held back until the backend port answers (10s cap) so the UI never appears before the API is reachable.
+- **Loopback-only**: the sidecar binds `127.0.0.1` and emits CORS headers solely for recognized origins (localhost/127.0.0.1 ports and the Tauri webview origins `tauri://localhost` / `http://tauri.localhost`).
+
+### 7.2 Verification gates (root scripts)
+- `bun run check` — app svelte-check **plus** `tsc --noEmit` over the sidecar and shared server modules.
+- `bun run test` — three suites: `scripts/api-contract.ts` (response-shape contracts), `scripts/sidecar-e2e.ts` (ingest → save → save-as-new-version → course-docs → theme → backup roundtrip against a live sidecar on scratch data), and the PDF pipeline smoke test.
+
+### 7.3 Audit findings — resolution status
+- ✅ **Sidecar type errors / contract drift** (queue `addTasks`, `getAllPrompts`, `collectLessonDocs`, missing `/api/parse`, `saveLessonTab` signature, duplicate `success` key): fixed, and structurally prevented going forward — dev server and sidecar now share one handler (`api.ts`).
+- ✅ **Frontmatter parsing** (YAML frontmatter + 25-line title scan): fixed; frontmatter is read/written with `Bun.YAML` (round-trip covered by e2e).
+- ✅ **Fetch monkey-patch** (`initApiInterceptor`): removed; replaced by typed `apiFetch` at all 34 call sites.
+- ⏳ **CSP `script-src 'unsafe-inline'`** (`tauri.conf.json`): known weakness, kept as a follow-up (needs SvelteKit nonce/hash-based CSP support).
+- The full historical audit log with per-item detail remains in `docs/improvements.md`.
 
 ---
 

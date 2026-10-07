@@ -17,7 +17,7 @@ function parseFrontmatter(fileContent: string): { frontmatter: Record<string, an
 }
 
 function serializeFrontmatter(frontmatter: Record<string, any>, body: string): string {
-  const yamlStr = (globalThis as any).Bun.YAML.stringify(frontmatter);
+  const yamlStr = (globalThis as any).Bun.YAML.stringify(frontmatter).replace(/\n?$/, '\n');
   return `---\n${yamlStr}---\n\n${body.trim()}\n`;
 }
 

@@ -18,6 +18,7 @@
     Loader2
   } from 'lucide-svelte';
   import { exportDocumentToPdf } from '$lib/pdf/exportPdf';
+  import { apiFetch, isTauriEnvironment } from '$lib/api';
 
   let courses: CourseManifest[] = $state([]);
   let isLoading = $state(true);
@@ -35,7 +36,7 @@
 
     try {
       if (type === 'notes') {
-        const res = await fetch(`/api/courses/${course.id}/course-docs?type=notes`);
+        const res = await apiFetch(`/api/courses/${course.id}/course-docs?type=notes`);
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
           throw new Error(errData.message || errData.error || 'Failed to assemble course notes');
@@ -56,7 +57,7 @@
         });
       } else {
         // summary, cheatsheet, test
-        const res = await fetch(`/api/courses/${course.id}/course-docs`, {
+        const res = await apiFetch(`/api/courses/${course.id}/course-docs`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ type })
@@ -101,7 +102,7 @@
   }
 
   async function openCourseFolder(courseId: string, path?: string) {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    if (isTauriEnvironment()) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
         await invoke('open_course_folder', { courseId, path });
@@ -112,7 +113,7 @@
     }
 
     try {
-      const res = await fetch(`/api/courses/${courseId}/open`, { method: 'POST' });
+      const res = await apiFetch(`/api/courses/${courseId}/open`, { method: 'POST' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         console.error('Failed to open course folder via API:', data.error || res.statusText);
@@ -125,7 +126,7 @@
   async function loadCourses() {
     isLoading = true;
     try {
-      const res = await fetch('/api/courses');
+      const res = await apiFetch('/api/courses');
       if (res.ok) {
         const data = await res.json();
         courses = data.courses || [];

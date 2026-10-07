@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import Header from '$lib/components/Header.svelte';
   import CodeMirrorEditor from '$lib/components/CodeMirrorEditor.svelte';
   import type { PromptItem } from '$lib/server/prompts';
@@ -24,7 +25,7 @@
   async function loadPrompts() {
     isLoading = true;
     try {
-      const res = await fetch('/api/prompts');
+      const res = await apiFetch('/api/prompts');
       if (res.ok) {
         const data = await res.json();
         prompts = data.prompts || [];
@@ -53,7 +54,7 @@
     isSaving = true;
 
     try {
-      const res = await fetch('/api/prompts', {
+      const res = await apiFetch('/api/prompts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

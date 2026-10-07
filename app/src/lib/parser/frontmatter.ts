@@ -63,6 +63,8 @@ export function parseFrontmatter(fileContent: string, defaultPrompt: string = ''
  * Serializes frontmatter object and body into standard YAML frontmatter markdown.
  */
 export function serializeWithFrontmatter(frontmatter: FrontmatterData, body: string): string {
-  const yamlStr = getYaml().stringify(frontmatter);
+  // Bun.YAML.stringify emits no trailing newline; the closing --- must
+  // start its own line or parseFrontmatter cannot find the block.
+  const yamlStr = getYaml().stringify(frontmatter).replace(/\n?$/, '\n');
   return `---\n${yamlStr}---\n\n${body.trim()}\n`;
 }

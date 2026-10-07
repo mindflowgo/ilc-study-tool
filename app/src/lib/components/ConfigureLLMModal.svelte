@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { apiFetch } from '$lib/api';
   import { X, Server, Sparkles, CheckCircle2, AlertCircle, Loader2, ArrowRight } from 'lucide-svelte';
 
   interface Props {
@@ -28,7 +29,7 @@
       }
 
       // Load config from server
-      fetch('/api/llm')
+      apiFetch('/api/llm')
         .then((res) => res.json())
         .then((data) => {
           if (data && data.config) {
@@ -62,7 +63,7 @@
     }
 
     // Sync to server immediately so background worker uses CURRENT active settings
-    fetch('/api/llm', {
+    apiFetch('/api/llm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -87,7 +88,7 @@
     statusMessage = null;
 
     try {
-      const res = await fetch('/api/llm', {
+      const res = await apiFetch('/api/llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

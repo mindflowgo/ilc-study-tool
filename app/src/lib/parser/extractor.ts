@@ -1,4 +1,4 @@
-import { openArchive } from 'zip-bun';
+import { unzipSync } from 'fflate';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -54,21 +54,20 @@ export class ArchiveExtractor {
       return null;
     }
 
-    // zip-bun reader: native miniz bindings, far faster than adm-zip on
-    // large SCORM packages. Entries are read lazily via extractFile(index).
-    const reader = openArchive(zipPath);
-    // Ignore macOS resource forks and metadata
+    // fflate: pure-JS but the fastest zip decoder that still works inside
+    // the compiled Bun sidecar binary (native libs like zip-bun do not).
+    // Entries are inflated eagerly; SCORM packages fit comfortably in memory.
     const zipEntries: Array<{ entryName: string; isDirectory: boolean; getData(): Buffer }> = [];
-    for (let i = 0; i < reader.getFileCount(); i++) {
-      const info = reader.getFileByIndex(i);
-      if (info.filename.startsWith('__MACOSX') || path.basename(info.filename).startsWith('._')) {
+    for (const [entryName, data] of Object.entries(unzipSync(new Uint8Array(fs.readFileSync(zipPath))))) {
+      // Ignore macOS resource forks and metadata
+      if (entryName.startsWith('__MACOSX') || path.basename(entryName).startsWith('._')) {
         continue;
       }
-      const index = i;
+      const bytes = Buffer.from(data);
       zipEntries.push({
-        entryName: info.filename,
-        isDirectory: info.directory,
-        getData: () => Buffer.from(reader.extractFile(index))
+        entryName,
+        isDirectory: entryName.endsWith('/'),
+        getData: () => bytes
       });
     }
     const zipBasename = path.basename(zipPath);
@@ -192,7 +191,6 @@ export class ArchiveExtractor {
         }
       }
     }
-    reader.close();
 
     if (!bestHtmlEntry) return null;
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import Header from '$lib/components/Header.svelte';
   import { onMount } from 'svelte';
-  import { isTauriEnvironment } from '$lib/api';
+  import { apiFetch, isTauriEnvironment } from '$lib/api';
   import {
     Settings,
     Server,
@@ -74,7 +74,7 @@
     }
 
     // Load canonical config from server
-    fetch('/api/llm')
+    apiFetch('/api/llm')
       .then((res) => res.json())
       .then((data) => {
         if (data && data.config) {
@@ -111,7 +111,7 @@
     }
 
     // Sync to server immediately so background queue worker uses CURRENT active settings
-    fetch('/api/llm', {
+    apiFetch('/api/llm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -140,7 +140,7 @@
     connectionTestResult = null;
 
     try {
-      const res = await fetch('/api/llm', {
+      const res = await apiFetch('/api/llm', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -176,7 +176,7 @@
     reparseResult = '';
 
     try {
-      const res = await fetch('/api/parse', {
+      const res = await apiFetch('/api/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -199,7 +199,7 @@
     compressImagesResult = '';
 
     try {
-      const res = await fetch('/api/maintenance/compress-images', {
+      const res = await apiFetch('/api/maintenance/compress-images', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -227,7 +227,7 @@
   async function loadStorageInfo() {
     isLoadingStorage = true;
     try {
-      const res = await fetch('/api/settings/storage');
+      const res = await apiFetch('/api/settings/storage');
       if (res.ok) {
         storageInfo = await res.json();
       }
@@ -240,7 +240,7 @@
 
   async function openFolder() {
     try {
-      const res = await fetch('/api/settings/open-folder', { method: 'POST' });
+      const res = await apiFetch('/api/settings/open-folder', { method: 'POST' });
       if (!res.ok) {
         storageMessage = { type: 'error', text: 'Failed to open data folder.' };
       }
@@ -281,7 +281,7 @@
     storageMessage = null;
 
     try {
-      const res = await fetch('/api/settings/storage', {
+      const res = await apiFetch('/api/settings/storage', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -332,7 +332,7 @@
     backupMessage = null;
 
     try {
-      const res = await fetch('/api/backup/export');
+      const res = await apiFetch('/api/backup/export');
       if (!res.ok) {
         throw new Error(`Export failed with status ${res.status}`);
       }
@@ -424,7 +424,7 @@
       const formData = new FormData();
       formData.append('file', file);
 
-      const res = await fetch('/api/backup/import', {
+      const res = await apiFetch('/api/backup/import', {
         method: 'POST',
         body: formData
       });
