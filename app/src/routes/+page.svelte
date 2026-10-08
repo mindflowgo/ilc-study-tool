@@ -18,6 +18,7 @@
     Loader2
   } from 'lucide-svelte';
   import { apiFetch, isTauriEnvironment } from '$lib/api';
+  import { stripCourseCodePrefix } from '$lib/courses';
 
   let courses: CourseManifest[] = $state([]);
   let isLoading = $state(true);
@@ -138,9 +139,9 @@
           <div class="space-y-3">
             <div>
               <h2 class="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-700 dark:group-hover:text-stone-300 transition">
-                <span class="text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700">
+                <span class="text-sm font-mono font-black uppercase tracking-widest px-1.5 py-1 rounded-md bg-amber-400/10 dark:bg-amber-300/30 text-white border-2 border-amber-500 dark:border-amber-400 shadow-sm">
                 {course.id}
-              </span> {course.title}
+              </span> {stripCourseCodePrefix(course.title, course.id)}
               </h2>
             </div>
 

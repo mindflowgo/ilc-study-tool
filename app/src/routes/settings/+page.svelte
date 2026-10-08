@@ -45,6 +45,8 @@
 
   // Backup state
   let isExportingBackup = $state(false);
+  let backupExportProgress = $state('');
+  let includeRawArchives = $state(false);
   let isImportingBackup = $state(false);
   let backupFileInput: HTMLInputElement | null = $state(null);
   let backupMessage = $state<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -329,19 +331,50 @@
 
   async function exportBackup() {
     isExportingBackup = true;
+    backupExportProgress = 'Connecting...';
     backupMessage = null;
 
     try {
-      const res = await apiFetch('/api/backup/export');
+      console.log(`[Backup Export] Requesting backup archive (includeRaw: ${includeRawArchives})...`);
+      const res = await apiFetch(`/api/backup/export?includeRaw=${includeRawArchives}`);
       if (!res.ok) {
         throw new Error(`Export failed with status ${res.status}`);
       }
 
-      const blob = await res.blob();
       const filename = `ilc-study-tool-backup-${new Date().toISOString().split('T')[0]}.zip`;
 
-      // If in Tauri desktop app, use native save dialog
-      if (isTauriEnvironment()) {
+      if (!res.body) {
+        throw new Error('Response body stream is unavailable.');
+      }
+
+      console.log('[Backup Export] Connected to server stream. Downloading archive...');
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let totalBytes = 0;
+      let lastLogTime = Date.now();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          totalBytes += value.length;
+          const mb = (totalBytes / 1024 / 1024).toFixed(1);
+          backupExportProgress = `${mb} MB`;
+          if (Date.now() - lastLogTime >= 800) {
+            console.log(`[Backup Export] Streamed ${mb} MB so far...`);
+            lastLogTime = Date.now();
+          }
+        }
+      }
+
+      const totalMb = (totalBytes / 1024 / 1024).toFixed(1);
+      console.log(`[Backup Export] Download complete! Total: ${totalMb} MB across ${chunks.length} chunks.`);
+
+      const blob = new Blob(chunks as BlobPart[], { type: 'application/zip' });
+
+      // If in Tauri desktop app and file is reasonable size (< 25MB), use native save dialog
+      if (isTauriEnvironment() && blob.size < 25 * 1024 * 1024) {
         try {
           const [{ save }, { invoke }] = await Promise.all([
             import('@tauri-apps/plugin-dialog'),
@@ -369,7 +402,7 @@
           await invoke('save_pdf_file', { path: savePath, dataB64 });
           backupMessage = {
             type: 'success',
-            text: `Backup successfully saved to ${savePath}`
+            text: `Backup successfully saved to ${savePath} (${totalMb} MB)`
           };
           return;
         } catch (tauriErr) {
@@ -377,7 +410,7 @@
         }
       }
 
-      // Browser fallback download
+      // Browser fallback download (works reliably for all archive sizes)
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -385,19 +418,21 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
 
       backupMessage = {
         type: 'success',
-        text: `Backup exported successfully: ${filename}`
+        text: `Backup exported successfully: ${filename} (${totalMb} MB)`
       };
     } catch (err: any) {
+      console.error('[Backup Export Error]', err);
       backupMessage = {
         type: 'error',
         text: 'Backup export failed: ' + (err?.message || 'Unknown error')
       };
     } finally {
       isExportingBackup = false;
+      backupExportProgress = '';
     }
   }
 
@@ -650,7 +685,17 @@
           <span class="text-[11px] text-stone-400 dark:text-stone-500">Zip/unzip courses and config</span>
         </div>
 
-        <div class="flex items-center space-x-1.5">
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Toggle to include/exclude raw uploads -->
+          <label class="flex items-center space-x-1.5 text-[11px] text-stone-500 dark:text-stone-400 select-none cursor-pointer" title="Include original uploaded course package zip archives found in _backup folders (increases archive size)">
+            <input
+              type="checkbox"
+              bind:checked={includeRawArchives}
+              class="rounded border-stone-300 dark:border-stone-700 text-stone-900 focus:ring-stone-500 cursor-pointer"
+            />
+            <span>Include raw package backups</span>
+          </label>
+
           <!-- Hidden file input for restore -->
           <input
             type="file"
@@ -663,11 +708,11 @@
           <button
             onclick={exportBackup}
             disabled={isExportingBackup}
-            class="flex items-center space-x-1 px-2 py-1 rounded border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-[11px] font-medium text-stone-700 dark:text-stone-300 disabled:opacity-50 transition cursor-pointer"
+            class="flex items-center space-x-1 px-2.5 py-1 rounded border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 hover:bg-stone-100 dark:hover:bg-stone-700 text-[11px] font-medium text-stone-700 dark:text-stone-300 disabled:opacity-50 transition cursor-pointer"
           >
             {#if isExportingBackup}
               <Loader2 class="w-3 h-3 animate-spin" />
-              <span>Exporting...</span>
+              <span>{backupExportProgress ? `Exporting (${backupExportProgress})...` : 'Exporting...'}</span>
             {:else}
               <Download class="w-3 h-3" />
               <span>Export .zip</span>

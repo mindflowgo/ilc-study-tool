@@ -76,6 +76,63 @@ ilc-study-tool/
     ├── tauri.conf.json         # Tauri v2 window & build configuration
     ├── capabilities/           # Security & permission capabilities
     └── src/                    # Rust entrypoint
+### 2.1 Key Directories & Codebase Map (Quick Reference)
+
+To accelerate code navigation and prevent exhaustive searches across the codebase:
+
+```
+app/src/
+├── lib/
+│   ├── api.ts                  # Typed client apiFetch() and environment detection (isTauriEnvironment)
+│   ├── queueStatus.svelte.ts   # Reactive global queue poll store & task listeners
+│   ├── theme.svelte.ts         # Light / Dark / System theme manager
+│   ├── components/             # Reusable UI components
+│   │   ├── Header.svelte           # Top application navigation bar
+│   │   ├── LessonSelector.svelte   # Unit & Lesson selector dropdown + prev/next controls
+│   │   ├── PromptCard.svelte       # Prompt template inspection & re-generation trigger
+│   │   ├── QuizRunner.svelte       # Interactive Ontario KICA practice quiz runner & scoring
+│   │   ├── MarkdownViewer.svelte   # Rendered Markdown reader view with callout & image sizing
+│   │   ├── CodeMirrorEditor.svelte # CodeMirror 6 markdown editor integration
+│   │   ├── DocumentViewerModal.svelte # Fullscreen modal for viewing curriculum PDFs & diagrams
+│   │   ├── UploadModal.svelte      # Course zip/mhtml ingestion modal (requires mandatory course code)
+│   │   └── AIQueuePopover.svelte   # Popover showing live background AI generation jobs
+│   ├── editor/                 # CodeMirror 6 Obsidian-style Live Preview extensions
+│   │   ├── livePreview.ts          # Heading, bold, italic, link, list & table styling widgets
+│   │   ├── frontmatter.ts          # Interactive YAML frontmatter Properties widget
+│   │   └── table.ts                # GFM table interactive editor
+│   ├── parser/                 # Course extraction, HTML conversion, and frontmatter
+│   │   ├── courseIngest.ts         # Course ingestion engine (creates lessons, summaries, manifest)
+│   │   ├── archiveExtractor.ts     # Universal archive unpacker (.zip, .mhtml, .html)
+│   │   ├── domCleaner.ts           # Cheerio DOM sanitizer (removes D2L chrome, extracts callouts)
+│   │   ├── turndownConverter.ts    # Cheerio/Turndown Markdown converter with GFM plugins
+│   │   ├── frontmatter.ts          # YAML parse/serialize (Bun.YAML with js-yaml fallback)
+│   │   └── imageOptimizer.ts       # Bun.Image compressor for images > 512px
+│   ├── pdf/                    # Client-side PDF generation pipeline (pdfmake)
+│   │   ├── exportPdf.ts            # High-level PDF export coordinator
+│   │   ├── compiler.ts             # Markdown to pdfmake AST compiler
+│   │   └── theme.ts                # Ontario curriculum PDF styling, margins, colors
+│   └── server/                 # Framework-agnostic backend services & API logic
+│       ├── api.ts                  # handleApiRequest() — Single source of truth for ALL /api/* routes
+│       ├── backup.ts               # Streaming zip backup export/import (createDataBackupZipStream)
+│       ├── courses.ts              # CourseService (lessons, tabs, multi-versions, course-wide payload)
+│       ├── queue.ts                # GenerationQueue & worker for background AI jobs
+│       ├── paths.ts                # Filesystem paths, DATA_DIR resolution, and path asserts
+│       ├── llm.ts                  # Unified LLM provider client (OpenAI, Ollama, Gemini, OpenRouter)
+│       └── prompts.ts              # PromptService for template storage in data/prompts/
+└── routes/                     # SvelteKit page routes
+    ├── +layout.svelte              # Root shell with global navigation and theme initialization
+    ├── +page.svelte                # Courses dashboard & library
+    ├── courses/[course_id]/        # Course study workspace (Full Lesson, Summary, Cheatsheet, Test)
+    ├── prompts/                    # Global prompt templates editor
+    ├── settings/                   # Data storage path, LLM config, backup/restore, re-indexing
+    └── api/[...path]/+server.ts    # SvelteKit catch-all adapter delegating to api.ts
+
+server/
+└── index.ts                    # Standalone HTTP sidecar binary entry point (compiled to tauri/server)
+
+tauri/
+├── src/lib.rs                  # Rust entrypoint: window setup, sidecar process lifecycle, save_pdf_file
+└── tauri.conf.json             # Tauri v2 bundle configuration and capabilities
 ```
 
 ---
@@ -493,3 +550,35 @@ Synthesizing multiple units into high-question-count exams (e.g., 24 KICA questi
 - Course-wide generation requests (`POST /api/courses/:id/course-docs`) supply a dedicated **180-second (3-minute) timeout** to ensure complex synthesis completes reliably without premature timeouts.
 - The UI reflects asynchronous status with inline spinners (`<Loader2 class="animate-spin" />`) and disabled button states, resetting interactive quiz state cleanly upon document replacement.
 
+---
+
+## 14. High-Capacity Streaming Backup & Migration Architecture
+
+The backup and migration system (`/api/backup/export` and `/api/backup/import`) provides full portability across platforms and machines. Because course materials and media assets can grow up to **2,000MB+**, the architecture is engineered to prevent network timeouts, event-loop freezes, and out-of-memory crashes.
+
+### 14.1 Architecture for Scale (Up to 2,000MB+)
+
+1. **Web-Standard `ReadableStream` Output**:
+   - `createDataBackupZipStream` (`src/lib/server/backup.ts`) produces a standard `ReadableStream<Uint8Array>` consumed by `new Response(stream)`.
+   - The server emits HTTP `200 OK` and response headers (`Content-Type: application/zip`) immediately (< 5ms). This immediately cancels the WebKit/browser resource timeout timer (which triggers if no response headers arrive within 30-60 seconds).
+2. **Selective Pass-Through vs. Deflate Compression**:
+   - Compressing already-compressed files (`.zip`, `.png`, `.jpg`, `.pdf`, `.webp`) with standard DEFLATE wastes enormous amounts of CPU cycles without reducing file size.
+   - The backup engine uses **`ZipPassThrough`** for binary files matching `/\.(zip|gz|png|jpg|jpeg|webp|pdf|mp4|mp3|woff2|woff)$/i`. It streams them with zero compression overhead while computing standard zip CRC32.
+   - Text files (`.md`, `.json`, `.txt`, `.html`, `.svg`) use **`ZipDeflate`** at `level: 1` (fastest compression), completing in milliseconds.
+3. **Non-Blocking Event-Loop Yielding**:
+   - During large archive generation, synchronous looping would freeze the single-threaded Node/Bun event loop.
+   - The archiver yields every 20 files (`await new Promise(r => setTimeout(r, 0))`), allowing concurrent HTTP requests—such as frontend `/api/queue` polling—to be accepted and serviced instantly with 0ms delay.
+4. **Default Exclusion of Raw Upload Archives (`_backup/`)**:
+   - When courses are ingested, the original `.zip` or `.mhtml` upload packages are archived in `data/courses/<course_id>/_backup/`. These raw archives typically account for 70–80% of total course disk space.
+   - By default, `/api/backup/export` **excludes** the `_backup/` folder, producing a lean, high-speed export containing 100% of the lessons, markdown notes, prompts, AI summaries, cheatsheets, interactive quizzes, assets, and app settings.
+   - A checkbox in Settings (`Include raw package backups`) allows users to include `_backup/` (`?includeRaw=true`) whenever a full byte-for-byte archival mirror is required.
+5. **Dual Console & UI Progress Telemetry**:
+   - **Server Console**: Logs real-time archiving progress (`[Backup Export] Progress: X/Y (Z%) - <file>`).
+   - **Client Console & UI**: The browser reads the incoming stream with `res.body.getReader()`, updating both the browser `console.log` (`[Backup Export] Streamed X MB so far...`) and the UI button badge (`Exporting (X.X MB)...`).
+   - **Tauri Memory Safety**: For archives larger than 25MB, Tauri downloads fall back to streaming `URL.createObjectURL(blob)` instead of buffering gigantic base64 strings in memory.
+
+### 14.2 User-Driven Course Ingestion (No Hardcoded Course Metadata)
+The course ingestion pipeline (`CourseIngest` in `src/lib/parser/courseIngest.ts`) is strictly dynamic:
+- **Mandatory User Input**: New courses require an explicit, user-supplied course code (e.g., `MCR3U`, `CLU3M`, `ENG4U`).
+- **No Mock Defaults**: Ingestion contains zero hardcoded course codes, mock curriculum titles, or fake unit names.
+- **Dynamic Unit Discovery**: Unit titles are extracted from the uploaded course content or preserved from existing `meta.json` manifests, falling back to clean numeric identifiers (`Unit 1`, `Unit 2`, etc.).

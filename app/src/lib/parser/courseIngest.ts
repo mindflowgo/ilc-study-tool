@@ -122,37 +122,12 @@ export class CourseIngest {
     const lessonsMap: Map<string, CourseManifestLesson> = new Map();
     const newLessonsAdded: string[] = [];
 
-    const courseUnitDefaults: Record<string, Record<number, string>> = {
-      clu3m: {
-        1: 'Heritage & Legal Foundations',
-        2: 'Rights & Freedoms',
-        3: 'Criminal Law & Justice System',
-        4: 'Civil Law & Dispute Resolution',
-        5: 'Culminating & Independent Inquiry'
-      },
-      baf3m: {
-        1: 'Fundamental Accounting Practices',
-        2: 'Advanced Accounting Procedures',
-        3: 'Internal Control & Financial Analysis',
-        4: 'Accounting for Merchandising & Service',
-        5: 'Culminating Activity'
-      }
-    };
-
-    const unitTitles: Record<number, string> = {
-      ...(courseUnitDefaults[courseId] || {
-        1: 'Unit 1: Foundations',
-        2: 'Unit 2: Core Concepts',
-        3: 'Unit 3: Applied Principles',
-        4: 'Unit 4: Advanced Topics',
-        5: 'Unit 5: Culminating'
-      })
-    };
+    const unitTitles: Record<number, string> = {};
 
     // Populate existing unit titles from manifest if available
     if (existingManifest?.units) {
       for (const u of existingManifest.units) {
-        if (u.title && !unitTitles[u.number]) {
+        if (u.title) {
           unitTitles[u.number] = u.title;
         }
       }
@@ -328,13 +303,7 @@ export class CourseIngest {
         lessons: lessons.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
       }));
 
-    const courseTitles: Record<string, string> = {
-      clu3m: 'CLU3M: Understanding Canadian Law',
-      baf3m: 'BAF3M: Financial Accounting Fundamentals'
-    };
-
-    const defaultTitle =
-      courseTitles[courseId] || `${courseId.toUpperCase()}: Course Study Guide`;
+    const defaultTitle = `${courseId.toUpperCase()}: Course Study Guide`;
 
     const manifest: CourseManifest = {
       id: courseId,

@@ -30,8 +30,13 @@
   let errorMessage = $state('');
 
   $effect(() => {
-    if (presetCourseId) {
-      courseId = presetCourseId;
+    if (isOpen) {
+      errorMessage = '';
+      if (presetCourseId) {
+        courseId = presetCourseId;
+      } else {
+        courseId = '';
+      }
     }
   });
 
@@ -70,11 +75,21 @@
       return;
     }
 
+    const finalCourseId = (presetCourseId || courseId).trim().toLowerCase();
+    if (!finalCourseId) {
+      errorMessage = 'Please enter a course code (e.g. cou1u, czh3m).';
+      return;
+    }
+
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(finalCourseId)) {
+      errorMessage = 'Invalid course code. Must start with a letter or digit and contain only letters, numbers, dots, hyphens, or underscores (e.g. mcr3u).';
+      return;
+    }
+
     isUploading = true;
     errorMessage = '';
 
     const formData = new FormData();
-    const finalCourseId = (courseId || presetCourseId).trim().toLowerCase() || 'course_' + Date.now();
     formData.append('courseId', finalCourseId);
     formData.append('mode', mode);
     if (mode === 'replace' && targetLessonId) {
@@ -178,14 +193,23 @@
       <!-- Course Identifier Input (only shown if not preset) -->
       {#if !presetCourseId}
         <div class="space-y-1.5">
-          <label for="course-id" class="text-xs font-medium text-stone-700 dark:text-stone-300">Course Identifier (e.g. clu3m, eng4u)</label>
+          <div class="flex items-center justify-between">
+            <label for="course-id" class="text-xs font-medium text-stone-700 dark:text-stone-300">
+              Course Code <span class="text-rose-500 font-bold">*</span>
+            </label>
+            <span class="text-[10px] text-stone-400 dark:text-stone-500 font-medium">Required</span>
+          </div>
           <input
             id="course-id"
             type="text"
+            required
             bind:value={courseId}
-            placeholder="clu3m"
-            class="w-full px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-950 text-xs text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
+            placeholder="e.g. MAT1U, ENG2U, PHY4U"
+            class="w-full px-3 py-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-950 text-xs font-mono uppercase text-stone-900 dark:text-stone-100 placeholder-stone-400 dark:placeholder-stone-500 focus:outline-none focus:ring-1 focus:ring-stone-900 dark:focus:ring-stone-100"
           />
+          <p class="text-[11px] text-stone-400 dark:text-stone-500">
+            Enter the curriculum code or course name (e.g. mcr3u).
+          </p>
         </div>
       {:else}
         <div class="p-2.5 rounded-lg bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 text-xs text-stone-600 dark:text-stone-300 flex items-center justify-between">
@@ -276,7 +300,7 @@
           </button>
           <button
             onclick={uploadFiles}
-            disabled={isUploading || selectedFiles.length === 0}
+            disabled={isUploading || selectedFiles.length === 0 || (!presetCourseId && !courseId.trim())}
             class="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 text-xs font-medium hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm cursor-pointer"
           >
             {#if isUploading}

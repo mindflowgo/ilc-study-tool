@@ -23,7 +23,7 @@ import {
 import { parseFrontmatter, serializeWithFrontmatter } from '../parser/frontmatter';
 import { CourseIngest } from '../parser/courseIngest';
 import { optimizeCourseImages } from '../parser/imageOptimizer';
-import { createDataBackupZip, restoreDataBackupZip } from './backup';
+import { createDataBackupZip, createDataBackupZipStream, restoreDataBackupZip } from './backup';
 
 /**
  * Single source of truth for the entire HTTP API.
@@ -475,12 +475,18 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
     // ---- /api/backup/export | /api/backup/import ----
     if (pathname === '/api/backup/export' && method === 'GET') {
       try {
-        const { buffer, filename } = createDataBackupZip();
-        return new Response(new Uint8Array(buffer), {
+        const includeRaw = url.searchParams.get('includeRaw') === 'true';
+        const { stream, filename, fileCount, courseCount } = createDataBackupZipStream({
+          includeRawArchives: includeRaw
+        });
+
+        return new Response(stream, {
           headers: {
             'Content-Type': 'application/zip',
             'Content-Disposition': `attachment; filename="${filename}"`,
-            'Cache-Control': 'no-cache'
+            'Cache-Control': 'no-cache',
+            'X-File-Count': String(fileCount),
+            'X-Course-Count': String(courseCount)
           }
         });
       } catch (err) {
