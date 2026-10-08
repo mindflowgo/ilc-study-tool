@@ -1,5 +1,6 @@
 <script lang="ts">
   import { apiFetch } from '$lib/api';
+  import { queueStatus } from '$lib/queueStatus.svelte';
   import { onMount, onDestroy } from 'svelte';
   import {
     Sparkles,
@@ -14,73 +15,62 @@
     Trash2,
     ChevronDown
   } from 'lucide-svelte';
-  import type { GenerationTask, QueueStatus } from '$lib/server/queue';
+  import Elapsed from './Elapsed.svelte';
+  import type { GenerationTask } from '$lib/server/queue';
 
   interface Props {
     courseId?: string;
+    /** Called when a generation task for this course finishes so the page can refresh that lesson. */
     onLessonUpdated?: (lessonId: string, tab: string) => void;
   }
 
   let { courseId = '', onLessonUpdated }: Props = $props();
 
   let isOpen = $state(false);
-  let status = $state<QueueStatus>({
-    isRunning: false,
-    isPaused: false,
-    activeTask: null,
-    pendingCount: 0,
-    completedCount: 0,
-    failedCount: 0,
-    totalTasks: 0,
-    tasks: [],
-    recentLogs: []
+
+  let releasePolling: (() => void) | null = null;
+  let unsubscribeFinished: (() => void) | null = null;
+
+  onMount(() => {
+    // Shared poller: every consumer reads the same snapshot, so no duplicate requests.
+    releasePolling = queueStatus.acquire();
+
+    // Surface finished tasks to the hosting page (lesson content refresh).
+    unsubscribeFinished = queueStatus.onTaskFinished((task: GenerationTask) => {
+      if (task.status !== 'completed') return;
+      if (courseId && task.courseId !== courseId.toLowerCase()) return;
+      onLessonUpdated?.(task.lessonId, task.tab);
+    });
   });
 
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
-  let lastCompletedTaskId: string | null = null;
-  let printedLogIds = new Set<string>();
+  onDestroy(() => {
+    releasePolling?.();
+    releasePolling = null;
+    unsubscribeFinished?.();
+    unsubscribeFinished = null;
+  });
 
-  async function fetchStatus() {
-    try {
-      const url = courseId ? `/api/queue?courseId=${courseId}` : '/api/queue';
-      const res = await fetch(url);
-      if (res.ok) {
-        const data: QueueStatus = await res.json();
-        status = data;
+  let status = $derived(queueStatus.status);
+  let reachable = $derived(queueStatus.reachable);
 
-        // Print server queue LLM logs to the browser console (like before)
-        if (data.recentLogs && data.recentLogs.length > 0) {
-          for (const log of data.recentLogs) {
-            if (!printedLogIds.has(log.id)) {
-              printedLogIds.add(log.id);
-              if (log.level === 'error') {
-                console.error(log.message);
-              } else if (log.level === 'warn') {
-                console.warn(log.message);
-              } else {
-                console.log(log.message);
-              }
-            }
-          }
-          if (printedLogIds.size > 200) {
-            const arr = Array.from(printedLogIds);
-            printedLogIds = new Set(arr.slice(-100));
-          }
-        }
+  // Scope counts to this course when the popover is mounted inside a course page.
+  let scopedTasks = $derived.by(() => {
+    if (!courseId) return status.tasks;
+    const wanted = courseId.toLowerCase();
+    return status.tasks.filter((t) => t.courseId === wanted);
+  });
 
-        // Detect newly completed task
-        const completed = data.tasks.find((t) => t.status === 'completed');
-        if (completed && completed.id !== lastCompletedTaskId) {
-          lastCompletedTaskId = completed.id;
-          if (onLessonUpdated) {
-            onLessonUpdated(completed.lessonId, completed.tab);
-          }
-        }
-      }
-    } catch (e) {
-      // quiet fail on network blips
-    }
-  }
+  let activeTask = $derived<GenerationTask | null>(status.activeTask);
+  let pendingCount = $derived(scopedTasks.filter((t) => t.status === 'pending').length);
+  let completedCount = $derived(scopedTasks.filter((t) => t.status === 'completed').length);
+  let failedCount = $derived(scopedTasks.filter((t) => t.status === 'failed').length);
+  let isBusy = $derived(status.pendingCount > 0 || activeTask !== null);
+
+  let progressPercent = $derived.by(() => {
+    const total = pendingCount + completedCount + (activeTask ? 1 : 0);
+    if (total === 0) return 0;
+    return Math.round((completedCount / total) * 100);
+  });
 
   async function sendAction(action: 'pause' | 'resume' | 'cancel' | 'retry') {
     try {
@@ -89,7 +79,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, courseId })
       });
-      await fetchStatus();
+      await queueStatus.refresh();
     } catch (e) {
       console.error('Queue action failed:', e);
     }
@@ -107,61 +97,33 @@
           tabs: ['summary', 'cheatsheet', 'test']
         })
       });
-      await fetchStatus();
+      await queueStatus.refresh();
     } catch (e) {
       console.error('Enqueue missing failed:', e);
     }
   }
-
-  function startPolling() {
-    if (pollInterval) clearInterval(pollInterval);
-    fetchStatus();
-    pollInterval = setInterval(() => {
-      fetchStatus();
-    }, status.pendingCount > 0 || status.activeTask ? 2500 : 10000);
-  }
-
-  onMount(() => {
-    startPolling();
-  });
-
-  onDestroy(() => {
-    if (pollInterval) clearInterval(pollInterval);
-  });
-
-  $effect(() => {
-    // If pending count or activeTask changes, adjust polling frequency
-    if (status.pendingCount > 0 || status.activeTask) {
-      if (pollInterval) clearInterval(pollInterval);
-      pollInterval = setInterval(fetchStatus, 2500);
-    }
-  });
-
-  let progressPercent = $derived.by(() => {
-    const total = status.pendingCount + status.completedCount + (status.activeTask ? 1 : 0);
-    if (total === 0) return 0;
-    return Math.round((status.completedCount / total) * 100);
-  });
 </script>
 
 <div class="relative">
   <!-- Trigger Button in Header -->
   <button
-    onclick={() => { isOpen = !isOpen; if (isOpen) fetchStatus(); }}
-    class="relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/80 dark:border-stone-700 bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs hover:shadow-xs cursor-pointer {status.activeTask ? 'border-amber-400 dark:border-amber-600 bg-amber-50/50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200' : ''}"
+    onclick={() => { isOpen = !isOpen; if (isOpen) queueStatus.refresh(); }}
+    class="relative flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/80 dark:border-stone-700 bg-white dark:bg-stone-900 hover:bg-stone-50 dark:hover:bg-stone-800 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs hover:shadow-xs cursor-pointer {activeTask ? 'border-amber-400 dark:border-amber-600 bg-amber-50/50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200' : ''}"
     title="Background AI Generation Queue"
   >
-    {#if status.activeTask}
+    {#if activeTask}
       <Loader2 class="w-3.5 h-3.5 text-amber-500 animate-spin" />
+    {:else if !reachable}
+      <AlertCircle class="w-3.5 h-3.5 text-rose-500" />
     {:else}
       <Sparkles class="w-3.5 h-3.5 text-amber-500" />
     {/if}
 
-    {#if status.pendingCount > 0}
+    {#if pendingCount > 0}
       <span
         class="inline-flex items-center justify-center min-w-[18px] h-4 px-1 text-[10px] font-bold text-white bg-amber-500 rounded-full animate-pulse shadow-xs ml-0.5"
       >
-        {status.pendingCount}
+        {pendingCount}
       </span>
     {/if}
 
@@ -188,12 +150,14 @@
           <div>
             <h3 class="font-semibold text-stone-900 dark:text-stone-100">AI Generation Queue</h3>
             <p class="text-[11px] text-stone-400 dark:text-stone-500">
-              {#if status.isPaused}
+              {#if !reachable}
+                Backend queue unreachable
+              {:else if status.isPaused}
                 Queue paused
-              {:else if status.activeTask}
+              {:else if activeTask}
                 Generating in background...
-              {:else if status.pendingCount > 0}
-                {status.pendingCount} tasks queued
+              {:else if pendingCount > 0}
+                {pendingCount} tasks queued
               {:else}
                 All tasks completed
               {/if}
@@ -209,30 +173,36 @@
         </button>
       </div>
 
+      {#if !reachable}
+        <div class="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/60 dark:border-rose-800/60 text-[11px] text-rose-800 dark:text-rose-200 leading-relaxed">
+          Could not reach the background queue, so live status is unavailable. Check that the local backend is running.
+        </div>
+      {/if}
+
       <!-- Active Task Card -->
-      {#if status.activeTask}
+      {#if activeTask}
         <div class="p-2.5 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/60 space-y-1.5">
           <div class="flex items-center justify-between text-[11px] font-medium text-amber-800 dark:text-amber-300">
             <div class="flex items-center space-x-1.5">
               <Loader2 class="w-3.5 h-3.5 animate-spin text-amber-600 dark:text-amber-400" />
-              <span>Generating {status.activeTask.tab.toUpperCase()}</span>
+              <span>Generating {activeTask.tab.replace(/-\d+$/, '').toUpperCase()}</span>
             </div>
             <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-200/60 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
               Active
             </span>
           </div>
           <p class="text-xs font-semibold text-stone-900 dark:text-stone-100 truncate">
-            {status.activeTask.lessonId} — {status.activeTask.lessonTitle}
+            {#if !courseId}{activeTask.courseId.toUpperCase()} · {/if}{activeTask.lessonId} — {activeTask.lessonTitle}
           </p>
         </div>
       {/if}
 
       <!-- Progress Stats -->
-      {#if status.pendingCount > 0 || status.completedCount > 0}
+      {#if pendingCount > 0 || completedCount > 0}
         <div class="space-y-1">
           <div class="flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400">
-            <span>Progress ({status.completedCount} completed)</span>
-            <span class="font-semibold text-stone-800 dark:text-stone-200">{status.pendingCount} remaining</span>
+            <span>Progress ({completedCount} completed)</span>
+            <span class="font-semibold text-stone-800 dark:text-stone-200">{pendingCount} remaining</span>
           </div>
           <div class="w-full h-1.5 bg-stone-100 dark:bg-stone-800 rounded-full overflow-hidden">
             <div
@@ -254,7 +224,7 @@
               <Play class="w-3 h-3" />
               <span>Resume</span>
             </button>
-          {:else if status.pendingCount > 0 || status.activeTask}
+          {:else if isBusy}
             <button
               onclick={() => sendAction('pause')}
               class="flex items-center space-x-1 px-2.5 py-1 rounded-md border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 font-medium transition cursor-pointer"
@@ -264,17 +234,17 @@
             </button>
           {/if}
 
-          {#if status.failedCount > 0}
+          {#if failedCount > 0}
             <button
               onclick={() => sendAction('retry')}
               class="flex items-center space-x-1 px-2 py-1 rounded-md border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/50 font-medium transition cursor-pointer"
             >
               <RotateCcw class="w-3 h-3" />
-              <span>Retry ({status.failedCount})</span>
+              <span>Retry ({failedCount})</span>
             </button>
           {/if}
 
-          {#if status.pendingCount > 0}
+          {#if pendingCount > 0}
             <button
               onclick={() => sendAction('cancel')}
               class="flex items-center space-x-1 px-2 py-1 rounded-md border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
@@ -286,7 +256,7 @@
           {/if}
         </div>
 
-        {#if courseId && status.pendingCount === 0 && !status.activeTask}
+        {#if courseId && pendingCount === 0 && !activeTask}
           <button
             onclick={enqueueMissing}
             class="flex items-center space-x-1 text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium cursor-pointer"
@@ -298,9 +268,9 @@
       </div>
 
       <!-- Recent / Queued Tasks List -->
-      {#if status.tasks.length > 0}
+      {#if scopedTasks.length > 0}
         <div class="max-h-48 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800 border-t border-stone-100 dark:border-stone-800 pt-2 space-y-1">
-          {#each status.tasks.slice(0, 15) as task (task.id)}
+          {#each scopedTasks.slice(0, 15) as task (task.id)}
             <div class="py-1.5 px-1 text-[11px]">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-2 min-w-0 pr-2">
@@ -315,17 +285,23 @@
                   {/if}
 
                   <span class="truncate font-medium text-stone-700 dark:text-stone-300">
-                    {task.lessonId}
+                    {#if !courseId}{task.courseId.toUpperCase()} · {/if}{task.lessonId}
                   </span>
 
                   <span class="uppercase text-[9px] font-semibold px-1 py-0.2 rounded bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 shrink-0">
-                    {task.tab}
+                    {task.tab.replace(/-\d+$/, '')}
                   </span>
+                  {#if /-\d+$/.test(task.tab)}
+                    <span class="text-[9px] font-semibold px-1 py-0.2 rounded bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 shrink-0">
+                      v{task.tab.split('-').pop()}
+                    </span>
+                  {/if}
                 </div>
 
-                <div class="shrink-0 text-[10px] text-stone-400 dark:text-stone-500">
+                <div class="shrink-0 text-[10px] text-stone-400 dark:text-stone-500 flex items-center space-x-1">
                   {#if task.status === 'processing'}
                     <span class="text-amber-600 dark:text-amber-400 font-medium">Running</span>
+                    <Elapsed since={task.startedAt} />
                   {:else if task.status === 'completed'}
                     <span class="text-emerald-600 dark:text-emerald-400 font-medium">Done</span>
                   {:else if task.status === 'failed'}

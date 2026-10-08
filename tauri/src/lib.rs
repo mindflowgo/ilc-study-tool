@@ -22,19 +22,27 @@ fn save_pdf_file(path: String, data_b64: String) -> Result<(), String> {
         return Err("Only .pdf, .md, .png, and .zip file exports are permitted".into());
     }
 
+    const CONTAINS_PATTERNS: &[&str] = &["/.ssh", "/.aws", "/.bash", "/.zsh"];
+    const STARTS_WITH_PATTERNS: &[&str] = &["/etc", "/system", "/usr", "/bin", "/sbin"];
+
     let path_str = path.to_lowercase();
-    if path_str.contains("/.ssh")
-        || path_str.contains("/.aws")
-        || path_str.contains("/.bash")
-        || path_str.contains("/.zsh")
-        || path_str.starts_with("/etc")
-        || path_str.starts_with("/system")
-        || path_str.starts_with("/usr")
-        || path_str.starts_with("/bin")
-        || path_str.starts_with("/sbin")
+    if CONTAINS_PATTERNS.iter().any(|p| path_str.contains(p))
+        || STARTS_WITH_PATTERNS.iter().any(|p| path_str.starts_with(p))
     {
         return Err("Saving to restricted system directories is not allowed".into());
-    }
+    }    
+    // if path_str.contains("/.ssh")
+    //     || path_str.contains("/.aws")
+    //     || path_str.contains("/.bash")
+    //     || path_str.contains("/.zsh")
+    //     || path_str.starts_with("/etc")
+    //     || path_str.starts_with("/system")
+    //     || path_str.starts_with("/usr")
+    //     || path_str.starts_with("/bin")
+    //     || path_str.starts_with("/sbin")
+    // {
+    //     return Err("Saving to restricted system directories is not allowed".into());
+    // }
 
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD
@@ -106,6 +114,19 @@ fn find_course_dir(app: &tauri::AppHandle, course_id: &str) -> Option<PathBuf> {
         for c in candidates {
             if c.exists() {
                 return Some(c);
+            }
+        }
+    }
+
+    // 2b. Portable layout: data/courses beside the executable. Checked AFTER
+    // cwd so the NSIS launcher ($EXEDIR cwd) still wins over its %TEMP%
+    // extraction dir, and BEFORE app-data so portable folders keep their data
+    // even when launched via shortcuts with a different "Start in".
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            let candidate = exe_dir.join("data").join("courses").join(&lower_id);
+            if candidate.exists() {
+                return Some(candidate);
             }
         }
     }
@@ -190,6 +211,16 @@ fn get_default_data_dir(app: &tauri::App) -> PathBuf {
             return cwd.join("data");
         } else if cwd.join("..").join("data").exists() {
             return cwd.join("..").join("data");
+        }
+    }
+    // Portable layout: data folder beside the executable (after cwd so the
+    // NSIS launcher's $EXEDIR working dir still wins over its %TEMP% dir)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            let candidate = exe_dir.join("data");
+            if candidate.exists() {
+                return candidate;
+            }
         }
     }
     app.path()

@@ -1,6 +1,7 @@
 import TurndownService from 'turndown';
 // @ts-ignore
 import { gfm } from 'turndown-plugin-gfm';
+import { serializeWithFrontmatter } from './frontmatter';
 
 export interface LessonFrontmatter {
   title: string;
@@ -85,9 +86,7 @@ export class TurndownConverter {
     // Clean up excessive blank lines
     const cleanedMd = mdBody.replace(/\n{4,}/g, '\n\n');
 
-    // Create YAML frontmatter
-    const yamlHeader = `---\n${(globalThis as any).Bun.YAML.stringify(frontmatter).replace(/\n?$/, '\n')}---\n\n`;
-
-    return yamlHeader + cleanedMd;
+    // Create YAML frontmatter safely across Bun and Node environments
+    return serializeWithFrontmatter(frontmatter, cleanedMd);
   }
 }

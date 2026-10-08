@@ -13,6 +13,12 @@
   let userAnswers: Record<string, string> = $state({});
   let submitted: boolean = $state(false);
 
+  $effect(() => {
+    testMarkdown;
+    userAnswers = {};
+    submitted = false;
+  });
+
   let parsedQuiz: ParsedQuiz = $derived.by(() => {
     return QuestionParser.parseMarkdown(testMarkdown);
   });

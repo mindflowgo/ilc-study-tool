@@ -4,7 +4,6 @@
     ChevronDown,
     ChevronUp,
     Loader2,
-    Wand2,
     Plus,
     Layers,
     RotateCcw
@@ -22,6 +21,7 @@
     versions?: VersionItem[];
     activeVersionId?: string;
     isGenerating?: boolean;
+    defaultPrompt?: string;
     onChangePrompt: (newPrompt: string) => void;
     onRegenerate: (asNewVersion: boolean) => void;
     onSelectVersion?: (versionId: string) => void;
@@ -35,6 +35,7 @@
     versions = [],
     activeVersionId = '',
     isGenerating = false,
+    defaultPrompt = '',
     onChangePrompt,
     onRegenerate,
     onSelectVersion,
@@ -52,9 +53,15 @@
     initialPrompt = prompt;
   });
 
-  let isModified = $derived(localPrompt.trim() !== initialPrompt.trim());
+  let isModified = $derived.by(() => {
+    if (defaultPrompt) {
+      return localPrompt.trim() !== defaultPrompt.trim();
+    }
+    return localPrompt.trim() !== initialPrompt.trim();
+  });
 
   let activeVersionLabel = $derived.by(() => {
+    if (versions.length === 0) return '';
     const found = versions.find((v) => v.id === activeVersionId);
     return found ? found.label : 'v1';
   });
@@ -72,12 +79,18 @@
   }
 
   function handleReset() {
-    localPrompt = initialPrompt;
-    onChangePrompt(initialPrompt);
+    const target = defaultPrompt || initialPrompt;
+    localPrompt = target;
+    onChangePrompt(target);
     if (onResetPrompt) onResetPrompt();
   }
 
   function handleOpenRegenModal() {
+    if (isGenerating) return;
+    if (versions.length === 0) {
+      onRegenerate(false);
+      return;
+    }
     showRegenModal = true;
   }
 
@@ -130,20 +143,12 @@
 
     <!-- Right: Actions -->
     <div class="flex items-center space-x-2">
-      <button
-        onclick={handleOpenRegenModal}
-        disabled={isGenerating}
-        class="flex items-center space-x-1.5 px-3 py-1 rounded-md bg-stone-900 dark:bg-stone-100 hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-50 text-white dark:text-stone-900 text-xs font-medium transition shadow-2xs cursor-pointer"
-        title="Re-generate content using active AI prompt"
-      >
-        {#if isGenerating}
+      {#if isGenerating}
+        <span class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-300 text-xs font-medium">
           <Loader2 class="w-3.5 h-3.5 animate-spin" />
           <span>Generating...</span>
-        {:else}
-          <Wand2 class="w-3.5 h-3.5" />
-          <span>Re-generate with AI</span>
-        {/if}
-      </button>
+        </span>
+      {/if}
 
       <button
         onclick={() => (isExpanded = !isExpanded)}
@@ -165,7 +170,7 @@
       <div class="space-y-1">
         <div class="flex items-center justify-between">
           <label for="prompt-input" class="text-[11px] font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider">
-            Prompt Instructions ({activeVersionLabel})
+            Prompt Instructions{activeVersionLabel ? ` (${activeVersionLabel})` : ''}
           </label>
           <span class="text-[11px] text-stone-400 dark:text-stone-500 font-mono">
             YAML frontmatter
@@ -204,7 +209,7 @@
         <button
           onclick={handleOpenRegenModal}
           disabled={isGenerating}
-          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-stone-900 dark:bg-stone-100 hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-50 text-white dark:text-stone-900 text-xs font-medium transition shadow-2xs cursor-pointer"
+          class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-stone-900 dark:bg-stone-100 hover:bg-stone-800 dark:hover:bg-stone-200 disabled:opacity-50 disabled:cursor-not-allowed text-white dark:text-stone-900 text-xs font-medium transition shadow-2xs cursor-pointer"
         >
           {#if isGenerating}
             <Loader2 class="w-3.5 h-3.5 animate-spin" />
@@ -220,7 +225,7 @@
 </div>
 
 <!-- Re-generate Destination Choice Modal -->
-{#if showRegenModal}
+{#if showRegenModal && versions.length > 0}
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/40 dark:bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
     <div class="bg-white dark:bg-stone-900 rounded-xl border border-stone-200 dark:border-stone-800 shadow-xl max-w-sm w-full p-5 space-y-4">
       <div class="space-y-1">

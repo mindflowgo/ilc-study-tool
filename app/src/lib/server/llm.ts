@@ -66,7 +66,13 @@ export class LLMService {
     }
   }
 
-  static async generateResult(config: LLMConfig, systemPrompt: string, userPrompt: string): Promise<LLMResult> {
+  static async generateResult(
+    config: LLMConfig,
+    systemPrompt: string,
+    userPrompt: string,
+    options?: { timeoutMs?: number }
+  ): Promise<LLMResult> {
+    const timeoutMs = options?.timeoutMs ?? 90_000;
     const primaryUrl = resolveCompletionsUrl(config.baseUrl);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
@@ -128,45 +134,101 @@ export class LLMService {
       console.log(`[LLM API Request] Model: ${payload.model || 'default'} | Endpoint: ${primaryUrl} (~${Math.round(userPrompt.length / 4)} tokens)`);
     }
 
-    const fetchWithRetry = async (url: string, bodyJson: string, maxRetries = 2): Promise<Response> => {
+    /**
+     * Fetches and fully reads the response body under a deadline (default 90s).
+     * A provider that sends headers but never finishes the body (or dribbles
+     * it forever) used to hang the generation worker permanently — the
+     * Promise.race deadline guarantees the failure fires regardless of how
+     * the runtime surfaces aborts on in-flight body reads.
+     */
+    const fetchWithRetry = async (
+      url: string,
+      bodyJson: string,
+      maxRetries = 2
+    ): Promise<{ status: number; statusText: string; bodyText: string }> => {
+      type AttemptResult =
+        | { kind: 'ok'; status: number; statusText: string; bodyText: string }
+        | { kind: 'retry'; status: number; retryAfterMs: number | null };
+
       let attempt = 0;
       while (true) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(new Error('LLM request timed out after 90s')), 90000);
+        const controller = new AbortController();
+        const work = (async (): Promise<AttemptResult> => {
           const response = await fetch(url, {
             method: 'POST',
             headers,
             body: bodyJson,
             signal: controller.signal
           });
-          clearTimeout(timeoutId);
 
-          if ((response.status === 429 || response.status === 502 || response.status === 503 || response.status === 504) && attempt < maxRetries) {
-            attempt++;
-            let waitMs = attempt * 1500;
+          if (
+            (response.status === 429 ||
+              response.status === 502 ||
+              response.status === 503 ||
+              response.status === 504) &&
+            attempt < maxRetries
+          ) {
+            let retryAfterMs: number | null = null;
             const retryAfter = response.headers.get('retry-after');
             if (retryAfter) {
               const parsed = parseInt(retryAfter, 10);
               if (!isNaN(parsed) && parsed > 0 && parsed <= 30) {
-                waitMs = parsed * 1000;
+                retryAfterMs = parsed * 1000;
               }
             }
-            console.warn(`[LLM API] HTTP ${response.status} from ${url}. Retrying in ${waitMs}ms (attempt ${attempt}/${maxRetries})...`);
+            return { kind: 'retry', status: response.status, retryAfterMs };
+          }
+
+          const bodyText = await response.text();
+          return {
+            kind: 'ok',
+            status: response.status,
+            statusText: response.statusText,
+            bodyText
+          };
+        })();
+        // Swallow a late rejection if the deadline wins the race.
+        work.catch(() => {});
+
+        const abortTimer = setTimeout(() => controller.abort(), timeoutMs);
+        let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<never>((_, reject) => {
+          deadlineTimer = setTimeout(
+            () => reject(new Error(`LLM request timed out after ${Math.round(timeoutMs / 1000)}s`)),
+            timeoutMs
+          );
+        });
+        deadline.catch(() => {});
+
+        try {
+          const result = (await Promise.race([work, deadline])) as AttemptResult;
+
+          if (result.kind === 'retry') {
+            attempt++;
+            const waitMs = result.retryAfterMs ?? attempt * 1500;
+            console.warn(`[LLM API] HTTP ${result.status} from ${url}. Retrying in ${waitMs}ms (attempt ${attempt}/${maxRetries})...`);
             await new Promise((r) => setTimeout(r, waitMs));
             continue;
           }
 
-          return response;
+          return { status: result.status, statusText: result.statusText, bodyText: result.bodyText };
         } catch (err: any) {
+          const timedOut = /timed out after/i.test(String(err?.message || ''));
           if (attempt < maxRetries) {
             attempt++;
             const waitMs = attempt * 1500;
-            console.warn(`[LLM API] Network error (${err?.message || err}). Retrying in ${waitMs}ms (attempt ${attempt}/${maxRetries})...`);
+            console.warn(
+              `[LLM API] ${timedOut ? `Timed out after ${Math.round(timeoutMs / 1000)}s` : `Network error (${err?.message || err})`}. Retrying in ${waitMs}ms (attempt ${attempt}/${maxRetries})...`
+            );
             await new Promise((r) => setTimeout(r, waitMs));
             continue;
           }
-          throw err;
+          throw timedOut
+            ? new Error(`LLM request timed out after ${Math.round(timeoutMs / 1000)}s`)
+            : new Error(`LLM request failed after ${attempt + 1} attempt(s): ${err?.message || err}`);
+        } finally {
+          clearTimeout(abortTimer);
+          if (deadlineTimer) clearTimeout(deadlineTimer);
         }
       }
     };
@@ -181,7 +243,7 @@ export class LLMService {
       if (fallbackUrl !== primaryUrl) {
         console.warn(`[LLM API] Primary URL returned 404, attempting fallback URL: ${fallbackUrl}`);
         const fallbackRes = await fetchWithRetry(fallbackUrl, bodyJson);
-        if (fallbackRes.ok) {
+        if (fallbackRes.status >= 200 && fallbackRes.status < 300) {
           res = fallbackRes;
         }
       }
@@ -189,13 +251,12 @@ export class LLMService {
 
     console.log(`[LLM API Response] Status: ${res.status} ${res.statusText}`);
 
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[LLM API Error Body] ${errText}`);
-      throw new Error(`LLM Error (${res.status}): ${errText}`);
+    if (res.status < 200 || res.status >= 300) {
+      console.error(`[LLM API Error Body] ${res.bodyText.slice(0, 500)}`);
+      throw new Error(`LLM Error (${res.status}): ${res.bodyText.slice(0, 500)}`);
     }
 
-    const data = await res.json();
+    const data = JSON.parse(res.bodyText);
     const completion = data.choices?.[0]?.message?.content || '';
     const usage = data.usage;
     const tokensInfo = usage?.total_tokens !== undefined
@@ -207,8 +268,13 @@ export class LLMService {
     return { completion, usage };
   }
 
-  static async generate(config: LLMConfig, systemPrompt: string, userPrompt: string): Promise<string> {
-    const result = await this.generateResult(config, systemPrompt, userPrompt);
+  static async generate(
+    config: LLMConfig,
+    systemPrompt: string,
+    userPrompt: string,
+    options?: { timeoutMs?: number }
+  ): Promise<string> {
+    const result = await this.generateResult(config, systemPrompt, userPrompt, options);
     return result.completion;
   }
 

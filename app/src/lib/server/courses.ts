@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CourseManifest } from '../parser/courseIngest';
+import { parseFrontmatter } from '../parser/frontmatter';
 import {
   assertCourseId,
   assertLessonId,
@@ -302,40 +303,189 @@ export class CourseService {
     for (const item of items) {
       if (!item.content || item.content.trim().length === 0) continue;
 
+      const parsed = parseFrontmatter(item.content);
+      const cleanBody = (parsed.body || item.content).trim();
+      if (!cleanBody) continue;
+
       if (item.unitNumber !== currentUnit) {
         currentUnit = item.unitNumber;
         lines.push(`\n\n---\n\n# Unit ${item.unitNumber}: ${item.unitTitle}\n\n`);
       }
       lines.push(`## Lesson ${item.lessonId}: ${item.lessonTitle}\n\n`);
-      lines.push(item.content.trim());
+      lines.push(cleanBody);
       lines.push('\n\n---\n\n');
     }
 
     return lines.join('');
   }
 
+  private static findLatestCuratedContent(
+    courseDir: string,
+    files: string[],
+    lessonId: string,
+    docType: 'summary' | 'cheatsheet' | 'test'
+  ): string | null {
+    const escaped = lessonId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escaped}\\.${docType}(?:-(\\d+))?\\.md$`, 'i');
+    const matching = files
+      .filter((f) => regex.test(f))
+      .map((f) => {
+        const m = f.match(regex);
+        const num = m && m[1] ? parseInt(m[1], 10) : 1;
+        return { file: f, version: num };
+      })
+      .sort((a, b) => b.version - a.version);
+
+    for (const item of matching) {
+      const filePath = safeJoin(courseDir, item.file);
+      if (!fs.existsSync(filePath)) continue;
+      try {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        if (raw.includes('Not yet generated') && raw.length < 200) {
+          continue;
+        }
+        const parsed = parseFrontmatter(raw);
+        const body = (parsed.body || raw).trim();
+        if (body.length > 0) {
+          return body;
+        }
+      } catch (e) {
+        console.warn(`Failed to read curated file ${filePath}:`, e);
+      }
+    }
+
+    return null;
+  }
+
+  private static extractTestQuestionPrompts(testBody: string): string[] {
+    const questionsPart = testBody.split(/##\s*Answers/i)[0] || testBody;
+    const lines = questionsPart.split('\n');
+    const questions: string[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (/^\d+[\).]\s+/.test(trimmed) && !trimmed.toLowerCase().startsWith('##')) {
+        questions.push(trimmed);
+      }
+    }
+
+    if (questions.length > 0) {
+      return questions.slice(0, 10);
+    }
+
+    const qSectionMatch = questionsPart.match(/##\s*Questions\s*([\s\S]*)/i);
+    if (qSectionMatch && qSectionMatch[1].trim()) {
+      const fallbackLines = qSectionMatch[1]
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(
+          (l) =>
+            l &&
+            !l.startsWith('- [ ]') &&
+            !l.startsWith('- [x]') &&
+            l !== '--' &&
+            !l.startsWith('<') &&
+            !l.startsWith('##')
+        )
+        .slice(0, 8);
+      return fallbackLines;
+    }
+
+    return [];
+  }
+
+  private static budgetLessonContent(text: string, maxChars = 4500): string {
+    let clean = text.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (clean.length > maxChars) {
+      const cutoff = clean.lastIndexOf('\n', maxChars);
+      if (cutoff > maxChars * 0.7) {
+        clean = clean.slice(0, cutoff).trim() + '\n\n*(Content trimmed for length)*';
+      } else {
+        clean = clean.slice(0, maxChars).trim() + '\n\n*(Content trimmed for length)*';
+      }
+    }
+    return clean;
+  }
+
   static buildAggregatedPayload(courseId: string, type: 'summary' | 'cheatsheet' | 'test'): string {
     const course = this.getCourse(courseId);
-    if (!course) return '';
+    const courseDir = this.courseDir(courseId);
+    if (!course || !fs.existsSync(courseDir)) return '';
 
+    const files = fs.readdirSync(courseDir);
     const lines: string[] = [];
     lines.push(`# Course: ${course.id.toUpperCase()} — ${course.title}\n\n`);
+    if (course.description) {
+      lines.push(`> ${course.description}\n\n`);
+    }
 
-    const items = this.gatherLessonFiles(courseId, type);
     let currentUnit = -1;
+    let curatedCount = 0;
 
-    for (const item of items) {
-      if (!item.content || item.content.trim().length === 0) continue;
-      // Skip pure placeholders
-      if (item.content.includes('Not yet generated') && item.content.length < 200) continue;
+    for (const unit of course.units) {
+      for (const lesson of unit.lessons) {
+        let lessonContent = '';
 
-      if (item.unitNumber !== currentUnit) {
-        currentUnit = item.unitNumber;
-        lines.push(`\n## Unit ${item.unitNumber}: ${item.unitTitle}\n\n`);
+        if (type === 'summary') {
+          const body =
+            this.findLatestCuratedContent(courseDir, files, lesson.id, 'summary') ??
+            this.findLatestCuratedContent(courseDir, files, lesson.id, 'cheatsheet');
+          if (body) {
+            lessonContent = this.budgetLessonContent(body, 3000);
+          }
+        } else if (type === 'cheatsheet') {
+          const body =
+            this.findLatestCuratedContent(courseDir, files, lesson.id, 'cheatsheet') ??
+            this.findLatestCuratedContent(courseDir, files, lesson.id, 'summary');
+          if (body) {
+            lessonContent = this.budgetLessonContent(body, 2500);
+          }
+        } else if (type === 'test') {
+          const primaryBody =
+            this.findLatestCuratedContent(courseDir, files, lesson.id, 'summary') ??
+            this.findLatestCuratedContent(courseDir, files, lesson.id, 'cheatsheet');
+          const testBody = this.findLatestCuratedContent(courseDir, files, lesson.id, 'test');
+
+          const parts: string[] = [];
+          if (primaryBody) {
+            parts.push(this.budgetLessonContent(primaryBody, 2200));
+          }
+          if (testBody) {
+            const prompts = this.extractTestQuestionPrompts(testBody);
+            if (prompts.length > 0) {
+              parts.push(
+                `#### Existing Lesson Quiz Coverage:\n${prompts.map((q) => `- ${q}`).join('\n')}`
+              );
+            } else {
+              parts.push(
+                `#### Existing Lesson Quiz Context:\n${this.budgetLessonContent(testBody, 1500)}`
+              );
+            }
+          }
+
+          if (parts.length > 0) {
+            lessonContent = parts.join('\n\n');
+          }
+        }
+
+        if (!lessonContent || lessonContent.trim().length === 0) {
+          continue;
+        }
+
+        curatedCount++;
+
+        if (unit.number !== currentUnit) {
+          currentUnit = unit.number;
+          lines.push(`\n## Unit ${unit.number}: ${unit.title}\n\n`);
+        }
+        lines.push(`### Lesson ${lesson.id}: ${lesson.title}\n\n`);
+        lines.push(lessonContent);
+        lines.push('\n\n');
       }
-      lines.push(`### Lesson ${item.lessonId}: ${item.lessonTitle}\n\n`);
-      lines.push(item.content.trim());
-      lines.push('\n\n');
+    }
+
+    if (curatedCount === 0) {
+      return '';
     }
 
     return lines.join('');

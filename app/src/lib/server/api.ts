@@ -20,6 +20,7 @@ import {
   loadAppSettings,
   saveAppSettings
 } from './paths';
+import { parseFrontmatter, serializeWithFrontmatter } from '../parser/frontmatter';
 import { CourseIngest } from '../parser/courseIngest';
 import { optimizeCourseImages } from '../parser/imageOptimizer';
 import { createDataBackupZip, restoreDataBackupZip } from './backup';
@@ -207,6 +208,9 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
             return json({
               success: true,
               enqueued,
+              // Tasks not added because an identical one is already
+              // pending/processing — surfaced so the UI can say so honestly.
+              skipped: items.length - enqueued.length,
               status: queueManager.getStatus(String(courseId))
             });
           } else {
@@ -274,13 +278,15 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
 
       if (contentType.includes('multipart/form-data')) {
         const formData = await req.formData();
-        const rawCourseId =
-          ((formData.get('courseId') as string) || '').trim().toLowerCase() || 'new_course';
+        const rawCourseId = ((formData.get('courseId') as string) || '').trim().toLowerCase();
+        if (!rawCourseId) {
+          return error(400, 'Course code is required (e.g. "mcr3u", "clu3m").');
+        }
         let courseId: string;
         try {
           courseId = assertCourseId(rawCourseId).toLowerCase();
         } catch {
-          return error(400, `Invalid courseId: "${rawCourseId}"`);
+          return error(400, `Invalid courseId: "${rawCourseId}". Must start with a letter or digit and contain only letters, numbers, dots, hyphens, or underscores.`);
         }
 
         const files = formData.getAll('files') as File[];
@@ -539,7 +545,7 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
         return openWithFileManager(courseDir);
       }
 
-      // GET|POST /api/courses/:course_id/course-docs
+      // GET|POST|PUT /api/courses/:course_id/course-docs
       if (subpath === 'course-docs') {
         const course = CourseService.getCourse(courseId);
         if (!course) return error(404, `Course '${courseId}' not found`);
@@ -565,6 +571,7 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
           const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
           const type = body.type as Tab | undefined;
           const forceRegenerate = Boolean(body.forceRegenerate);
+          const customPrompt = typeof body.customPrompt === 'string' ? body.customPrompt.trim() : undefined;
 
           if (!type || !['summary', 'cheatsheet', 'test'].includes(type)) {
             return error(400, "Invalid type. Must be 'summary', 'cheatsheet', or 'test'");
@@ -578,17 +585,22 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
             }
           }
 
-          // 2. System prompt template (course-specific, falling back to lesson-level)
-          const promptItem =
-            PromptService.getPrompt(`course_${type}`) ?? PromptService.getPrompt(type);
-          const systemPrompt = promptItem ? promptItem.content : '';
+          // 2. System prompt template (custom prompt or course-specific, falling back to lesson-level)
+          let systemPrompt = customPrompt;
+          if (!systemPrompt) {
+            const promptItem =
+              PromptService.getPrompt(`course_${type}`) ?? PromptService.getPrompt(type);
+            systemPrompt = promptItem ? promptItem.content : '';
+          }
 
           // 3. Aggregated lesson payload
           const payload = CourseService.buildAggregatedPayload(courseId, type);
           if (!payload || payload.trim().length < 50) {
             return error(
               400,
-              `No lesson ${type}s found to generate a course-level ${type}. Generate lesson ${type}s first.`
+              "No curated lesson materials (.summary, .cheatsheet, or .test) found to generate a course-level " +
+                type +
+                ". Please generate some lesson summaries or study sheets first."
             );
           }
 
@@ -604,8 +616,17 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
 
           // 5. Generate + save
           try {
-            const result = await LLMService.generateResult(config, systemPrompt, payload);
-            const content = result.completion.trim();
+            const result = await LLMService.generateResult(config, systemPrompt, payload, { timeoutMs: 180_000 });
+            const parsed = parseFrontmatter(result.completion.trim());
+            const content = serializeWithFrontmatter(
+              {
+                ...parsed.frontmatter,
+                type: `course_${type}`,
+                updatedAt: new Date().toISOString().split('T')[0],
+                prompt: systemPrompt
+              },
+              parsed.body.trim()
+            );
             CourseService.saveCourseDocument(courseId, type, content);
             console.log(
               `[Course AI] Saved course.${type}.md for ${courseId.toUpperCase()} (${content.length} chars)`
@@ -615,6 +636,25 @@ export async function handleApiRequest(req: Request, url: URL): Promise<Response
             console.error(`[Course AI] Failed to generate course.${type}.md:`, err);
             return error(500, err instanceof Error ? err.message : `Failed to generate course ${type}`);
           }
+        }
+
+        if (method === 'PUT') {
+          const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+          const type = body.type as Tab | undefined;
+          const content = body.content as string | undefined;
+
+          if (!type || !['summary', 'cheatsheet', 'test'].includes(type)) {
+            return error(400, "Invalid type. Must be 'summary', 'cheatsheet', or 'test'");
+          }
+          if (typeof content !== 'string') {
+            return error(400, 'Invalid request: content string required');
+          }
+
+          const success = CourseService.saveCourseDocument(courseId, type, content);
+          if (!success) {
+            return error(500, `Failed to save course ${type}`);
+          }
+          return json({ success: true });
         }
       }
 

@@ -1,3 +1,5 @@
+import { load, dump } from 'js-yaml';
+
 export interface FrontmatterData {
   prompt?: string;
   type?: string;
@@ -12,21 +14,30 @@ export interface ParsedMarkdownFile {
   body: string;
 }
 
-// Bun.YAML is a runtime builtin — keeps the compiled sidecar binary free of
-// a separate YAML dependency. Structural typing avoids requiring @types/bun
-// in the app package.
-interface BunYaml {
+// Bun.YAML is the preferred runtime builtin when running on Bun (sidecar, server, CLI).
+// When running in a browser / Tauri WebView environment where Bun is unavailable,
+// it falls back cleanly to js-yaml.
+interface YamlEngine {
   parse(source: string): unknown;
   stringify(value: unknown): string;
 }
 
-function getYaml(): BunYaml {
-  const yaml = (globalThis as { Bun?: { YAML?: BunYaml } }).Bun?.YAML;
-  if (!yaml) {
-    throw new Error('Bun.YAML is unavailable (requires Bun >= 1.3.15)');
+function getYaml(): YamlEngine {
+  const bunYaml = (typeof Bun !== 'undefined' ? Bun.YAML : undefined)
+    ?? (globalThis as { Bun?: { YAML?: YamlEngine } }).Bun?.YAML;
+  if (bunYaml) {
+    return bunYaml;
   }
-  return yaml;
+  return {
+    parse(source: string): unknown {
+      return load(source);
+    },
+    stringify(value: unknown): string {
+      return dump(value, { lineWidth: -1 });
+    }
+  };
 }
+
 
 /**
  * Parses YAML frontmatter (---\n...\n---) from markdown content.

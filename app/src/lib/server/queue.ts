@@ -3,7 +3,7 @@ import path from 'node:path';
 import { LLMService, type LLMConfig } from './llm';
 import { PromptService } from './prompts';
 import { CourseService } from './courses';
-import { serializeWithFrontmatter } from '../parser/frontmatter';
+import { parseFrontmatter, serializeWithFrontmatter } from '../parser/frontmatter';
 
 export interface GenerationTask {
   id: string; // e.g. "gwl3o:01.01:summary"
@@ -46,6 +46,20 @@ class GenerationQueue {
   private isProcessing = false;
   private isPaused = false;
   private activeTaskId: string | null = null;
+
+  /**
+   * A task stuck 'processing' longer than this is treated as stalled and
+   * failed so the worker can continue. The LLM client's own timeout bounds a
+   * legitimate attempt at ~5 minutes (90s × retries), so 15 minutes leaves a
+   * wide safety margin.
+   */
+  private static readonly STALE_PROCESSING_MS = 15 * 60 * 1000;
+
+  constructor() {
+    // Self-healing sweep: recovers the queue if a worker ever wedges
+    // (e.g. an LLM stream that dies in a way even the client timeout missed).
+    setInterval(() => this.sweepStalledTasks(), 60_000);
+  }
 
   addLog(level: 'info' | 'warn' | 'error', message: string) {
     const entry: QueueLogEntry = {
@@ -254,6 +268,45 @@ class GenerationQueue {
     });
   }
 
+  /**
+   * Watchdog: fail tasks that have been 'processing' implausibly long and
+   * clear a wedged isProcessing flag, then kick the worker again.
+   */
+  private sweepStalledTasks(): void {
+    const now = Date.now();
+    let changed = false;
+
+    for (const task of this.tasks.values()) {
+      if (
+        task.status === 'processing' &&
+        task.startedAt &&
+        now - Date.parse(task.startedAt) > GenerationQueue.STALE_PROCESSING_MS
+      ) {
+        task.status = 'failed';
+        task.error = 'Task stalled (processing for over 15 minutes) — recovered by queue watchdog';
+        this.addLog('warn', `[Queue Watchdog] Marked stalled task as failed: ${task.id}`);
+        if (this.activeTaskId === task.id) {
+          this.activeTaskId = null;
+        }
+        changed = true;
+      }
+    }
+
+    // Defensive unstick: worker flag set but nobody is actually processing
+    if (
+      this.isProcessing &&
+      !this.activeTaskId &&
+      !Array.from(this.tasks.values()).some((t) => t.status === 'processing')
+    ) {
+      this.isProcessing = false;
+      changed = true;
+    }
+
+    if (changed && !this.isPaused) {
+      this.triggerProcessing();
+    }
+  }
+
   private async processNext(): Promise<void> {
     if (this.isPaused) {
       this.isProcessing = false;
@@ -333,16 +386,18 @@ class GenerationQueue {
       );
 
       const result = await LLMService.generateResult(effectiveConfig, systemPrompt, userPrompt);
+      const parsed = parseFrontmatter(result.completion.trim());
 
       // Serialize with YAML frontmatter
       const frontmatter = {
-        prompt: systemPrompt,
+        ...parsed.frontmatter,
         type: nextTask.tab,
         version: 1,
-        updatedAt: new Date().toISOString().split('T')[0]
+        updatedAt: new Date().toISOString().split('T')[0],
+        prompt: systemPrompt
       };
 
-      const finalMarkdown = serializeWithFrontmatter(frontmatter, result.completion);
+      const finalMarkdown = serializeWithFrontmatter(frontmatter, parsed.body.trim());
 
       // Save to disk
       CourseService.saveLessonTab(nextTask.courseId, nextTask.lessonId, nextTask.tab, finalMarkdown, {

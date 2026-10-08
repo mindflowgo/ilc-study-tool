@@ -1,5 +1,6 @@
 <script lang="ts">
   import { apiFetch } from '$lib/api';
+  import { queueStatus } from '$lib/queueStatus.svelte';
   import { page } from '$app/stores';
   import Header from '$lib/components/Header.svelte';
   import LessonSelector from '$lib/components/LessonSelector.svelte';
@@ -47,6 +48,12 @@
   let isLLMModalOpen: boolean = $state(false);
   let isGeneratingAI: boolean = $state(false);
 
+  // Complete course scope states
+  let isCourseScope: boolean = $state(false);
+  let isLoadingCourseDoc: boolean = $state(false);
+  let isGeneratingCourseDoc: boolean = $state(false);
+  let quizRunnerKey: number = $state(0);
+
   // Lesson bundle and generic prompt templates
   let lessonBundle: LessonContentBundle | null = $state(null);
   let genericPrompts: Record<string, string> = $state({});
@@ -82,6 +89,9 @@
   // Default prompt for active tab
   let defaultPromptForActiveTab = $derived.by(() => {
     if (activeTab === 'lesson') return '';
+    if (isCourseScope) {
+      return genericPrompts[`course_${activeTab}`] || genericPrompts[activeTab] || '';
+    }
     return genericPrompts[activeTab] || '';
   });
 
@@ -96,12 +106,12 @@
     if (activeTab === 'summary') return 'Summary';
     if (activeTab === 'cheatsheet') return 'Cheatsheet';
     if (activeTab === 'test') return 'Practice Test';
-    return '';
+    return isCourseScope ? 'Course Notes' : 'Notes';
   });
 
   // Current list of versions for active tab
   let currentTabVersions = $derived.by((): VersionItem[] => {
-    if (!lessonBundle || activeTab === 'lesson') return [];
+    if (isCourseScope || !lessonBundle || activeTab === 'lesson') return [];
     if (activeTab === 'summary') return lessonBundle.summaries;
     if (activeTab === 'cheatsheet') return lessonBundle.cheatsheets;
     if (activeTab === 'test') return lessonBundle.tests;
@@ -109,6 +119,7 @@
   });
 
   let activeVersionId = $derived.by(() => {
+    if (isCourseScope) return activeTab;
     if (activeTab === 'lesson') return 'lesson';
     return activeVersions[activeTab] || currentTabVersions[0]?.id || activeTab;
   });
@@ -141,7 +152,7 @@
       if (res.ok) {
         const data = await res.json();
         course = data.course;
-        if (course && course.units.length > 0 && course.units[0].lessons.length > 0) {
+        if (!isCourseScope && course && course.units.length > 0 && course.units[0].lessons.length > 0) {
           const target = selectTargetLessonId || selectedLessonId || course.units[0].lessons[0].id;
           await loadLesson(target);
         }
@@ -151,6 +162,127 @@
     } finally {
       isLoadingCourse = false;
     }
+  }
+
+  async function loadCourseDocument(tab: 'lesson' | 'summary' | 'cheatsheet' | 'test') {
+    isLoadingCourseDoc = true;
+    try {
+      if (tab === 'lesson') {
+        const res = await apiFetch(`/api/courses/${courseId}/course-docs?type=notes`);
+        if (res.ok) {
+          const data = await res.json();
+          tabContents.lesson = data.markdown || '';
+          originalContents.lesson = tabContents.lesson;
+        }
+      } else {
+        const res = await apiFetch(`/api/courses/${courseId}/course-docs?type=${tab}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.exists && data.markdown && data.markdown.trim().length > 0) {
+            tabContents[tab] = data.markdown;
+            originalContents[tab] = data.markdown;
+          } else {
+            // Not yet generated: auto-trigger generation
+            isLoadingCourseDoc = false;
+            await generateCourseDocument(tab);
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.error(`Failed to load course document ${tab}:`, e);
+    } finally {
+      isLoadingCourseDoc = false;
+    }
+  }
+
+  async function generateCourseDocument(type: 'lesson' | 'summary' | 'cheatsheet' | 'test') {
+    if (type === 'lesson') return;
+    const localConfig = getLocalLLMConfig();
+    if (!localConfig?.baseUrl) {
+      isLLMModalOpen = true;
+      return;
+    }
+
+    isGeneratingCourseDoc = true;
+    try {
+      const promptKey = `course_${type}`;
+      const activePrompt = parsedActiveTab.frontmatter.prompt || genericPrompts[promptKey] || genericPrompts[type] || '';
+
+      const res = await apiFetch(`/api/courses/${courseId}/course-docs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          forceRegenerate: true,
+          customPrompt: activePrompt,
+          customConfig: localConfig
+        })
+      });
+
+      if (!res.ok) {
+        let errorMsg = '';
+        try {
+          const errData = await res.json();
+          errorMsg = errData.message || errData.error || errData.detail || '';
+        } catch {
+          errorMsg = (await res.text().catch(() => '')).trim();
+        }
+        if (!errorMsg) {
+          errorMsg = `Failed to generate course ${type} (HTTP ${res.status})`;
+        }
+        throw new Error(errorMsg);
+      }
+
+      const data = await res.json();
+      const generatedMarkdown = data.markdown || '';
+      tabContents[type] = generatedMarkdown;
+      tabContents = { ...tabContents };
+      originalContents[type] = generatedMarkdown;
+      originalContents = { ...originalContents };
+
+      if (type === 'test') {
+        quizRunnerKey++;
+      }
+
+      if (course) {
+        if (!course.courseDocs) {
+          course.courseDocs = { summary: false, cheatsheet: false, test: false };
+        }
+        course.courseDocs[type] = true;
+      }
+
+      saveSuccessMessage = `✨ Generated course ${tabDisplayName}!`;
+      setTimeout(() => {
+        saveSuccessMessage = '';
+      }, 3500);
+    } catch (err: any) {
+      console.error(`Failed to generate course ${type}:`, err);
+      const detail = err?.message || 'Check your LLM configuration or server logs.';
+      alert(`AI Course Document Error: ${detail}`);
+    } finally {
+      isGeneratingCourseDoc = false;
+    }
+  }
+
+  function switchTab(tab: 'lesson' | 'summary' | 'cheatsheet' | 'test') {
+    activeTab = tab;
+    isEditing = false;
+    if (isCourseScope) {
+      loadCourseDocument(tab);
+    }
+  }
+
+  function selectLesson(lessonId: string) {
+    isCourseScope = false;
+    isEditing = false;
+    loadLesson(lessonId);
+  }
+
+  function selectCourseMode() {
+    isCourseScope = true;
+    isEditing = false;
+    loadCourseDocument(activeTab);
   }
 
   async function loadLesson(lessonId: string, retainVersionTab?: { tab: 'summary' | 'cheatsheet' | 'test'; versionId: string }) {
@@ -262,6 +394,37 @@
   }
 
   async function saveCurrentTab() {
+    if (isCourseScope) {
+      if (activeTab === 'lesson') return; // Notes cannot be edited
+      isSaving = true;
+      try {
+        const res = await apiFetch(`/api/courses/${courseId}/course-docs`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: activeTab,
+            content: tabContents[activeTab]
+          })
+        });
+        if (res.ok) {
+          originalContents[activeTab] = tabContents[activeTab];
+          saveSuccessMessage = 'Saved!';
+          setTimeout(() => {
+            saveSuccessMessage = '';
+          }, 2000);
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || 'Failed to save course document');
+        }
+      } catch (e: any) {
+        console.error('Failed to save course doc:', e);
+        alert(e?.message || 'Failed to save course document');
+      } finally {
+        isSaving = false;
+      }
+      return;
+    }
+
     if (!selectedLessonId) return;
     isSaving = true;
 
@@ -374,7 +537,21 @@
         throw new Error(errText || 'Failed to queue generation task');
       }
 
-      console.log(`[ILC AI Enqueue Success] ${tabDisplayName} task added to background queue.`);
+      const data = await res.json();
+      const enqueuedCount: number = data.enqueued?.length ?? 0;
+
+      if (enqueuedCount === 0) {
+        // The queue silently deduplicates against an identical task that is
+        // already pending or processing — say so instead of pretending.
+        console.log('[ILC AI Enqueue] An identical task is already queued or generating — nothing new added.');
+        saveSuccessMessage = `⏳ ${tabDisplayName} is already queued or generating — watch the AI Queue for progress.`;
+        setTimeout(() => {
+          saveSuccessMessage = '';
+        }, 4000);
+        return;
+      }
+
+      console.log(`[ILC AI Enqueue Success] ${tabDisplayName} task added to background queue (task id: ${data.enqueued[0].id}).`);
 
       saveSuccessMessage = asNewVersion
         ? `✨ Queued new version of ${tabDisplayName}!`
@@ -383,10 +560,66 @@
       setTimeout(() => {
         saveSuccessMessage = '';
       }, 3500);
+
+      // Wake the shared queue poller so status (and console logs from the
+      // backend worker) appear immediately.
+      queueStatus.refresh();
     } catch (err: any) {
       alert('AI Generation Queue Error: ' + (err?.message || 'Check your LLM configuration.'));
     }
   }
+
+  /**
+   * Event-driven generation feedback: the shared queueStatus store polls the
+   * backend once for everyone and emits finished tasks; we just toast the
+   * outcome for this course. Lesson content refresh goes through the Header's
+   * onLessonUpdated callback (wired via AIQueuePopover).
+   */
+  let releaseQueueWatch: (() => void) | null = null;
+  let unsubscribeQueueFinished: (() => void) | null = null;
+
+  function startQueueFeedback(): void {
+    releaseQueueWatch = queueStatus.acquire();
+    unsubscribeQueueFinished = queueStatus.onTaskFinished((task) => {
+      if (task.courseId !== (courseId || '').toLowerCase()) return;
+      const label = task.tab.charAt(0).toUpperCase() + task.tab.slice(1);
+      if (task.status === 'completed') {
+        console.log(`[ILC AI Done] ${label} for ${task.lessonId} regenerated.`);
+        saveSuccessMessage = `✨ ${label} regenerated!`;
+        setTimeout(() => {
+          saveSuccessMessage = '';
+        }, 3500);
+      } else if (task.status === 'failed') {
+        console.error(`[ILC AI Failed] ${label} for ${task.lessonId}: ${task.error}`);
+        saveSuccessMessage = `⚠️ ${label} generation failed`;
+        setTimeout(() => {
+          saveSuccessMessage = '';
+        }, 3500);
+      }
+    });
+  }
+
+  function stopQueueFeedback(): void {
+    releaseQueueWatch?.();
+    releaseQueueWatch = null;
+    unsubscribeQueueFinished?.();
+    unsubscribeQueueFinished = null;
+  }
+
+  /**
+   * True while the active lesson+tab has a queued or processing generation
+   * task — drives the PromptCard's Generating... state (the annotation
+   * spinner state isGeneratingAI is a separate flow).
+   */
+  let isTabGenerating = $derived.by(() => {
+    const s = queueStatus.status;
+    const matchTab = (tab: string) => tab.replace(/-\d+$/, '') === activeTab;
+    const matches = (t: { courseId: string; lessonId: string; tab: string }) =>
+      t.courseId === (courseId || '').toLowerCase() &&
+      t.lessonId === selectedLessonId &&
+      matchTab(t.tab);
+    return Boolean(s.activeTask && matches(s.activeTask)) || s.tasks.some((t) => t.status === 'pending' && matches(t));
+  });
 
   let isQueueingMissing: boolean = $state(false);
 
@@ -546,6 +779,8 @@
       const q = pendingAnnotationQuery;
       pendingAnnotationQuery = null;
       handleAnnotationSubmit(q.selectedText, q.query);
+    } else if (isCourseScope && activeTab !== 'lesson') {
+      generateCourseDocument(activeTab);
     } else {
       triggerAIGeneration(false);
     }
@@ -562,23 +797,54 @@
   }
 
   async function handleExportPDF() {
-    if (isExportingPdf || !course || !selectedLessonId) return;
+    if (isExportingPdf || !course) return;
 
     isExportingPdf = true;
     try {
-      const activeVer = currentTabVersions.find((v) => v.id === activeVersionId);
-      const exportTabName = activeTab === 'lesson' ? 'Course Notes' : tabDisplayName || activeTab;
+      if (isCourseScope) {
+        if (activeTab === 'lesson') {
+          await exportDocumentToPdf({
+            courseCode: course.id,
+            courseTitle: course.title,
+            lessonId: 'Course',
+            lessonTitle: 'Complete Course Notes',
+            tab: 'lesson',
+            tabDisplayName: 'Complete Notes',
+            rawMarkdown: tabContents.lesson
+          });
+        } else {
+          const displayTitles: Record<string, { lessonTitle: string; tabDisplayName: string }> = {
+            summary: { lessonTitle: 'Comprehensive Course Summary', tabDisplayName: 'Course Summary' },
+            cheatsheet: { lessonTitle: 'Master Course Cheatsheet', tabDisplayName: 'Course Cheatsheet' },
+            test: { lessonTitle: 'Final Course Practice Exam', tabDisplayName: 'Course Practice Test' }
+          };
+          const info = displayTitles[activeTab] || { lessonTitle: `Course ${tabDisplayName}`, tabDisplayName: `Course ${tabDisplayName}` };
+          await exportDocumentToPdf({
+            courseCode: course.id,
+            courseTitle: course.title,
+            lessonId: 'Course',
+            lessonTitle: info.lessonTitle,
+            tab: activeTab,
+            tabDisplayName: info.tabDisplayName,
+            rawMarkdown: tabContents[activeTab]
+          });
+        }
+      } else {
+        if (!selectedLessonId) return;
+        const activeVer = currentTabVersions.find((v) => v.id === activeVersionId);
+        const exportTabName = activeTab === 'lesson' ? 'Course Notes' : tabDisplayName || activeTab;
 
-      await exportDocumentToPdf({
-        courseCode: course.id,
-        courseTitle: course.title,
-        lessonId: selectedLessonId,
-        lessonTitle: currentLessonTitle || selectedLessonId,
-        tab: activeTab,
-        tabDisplayName: exportTabName,
-        version: activeVer?.versionNumber,
-        rawMarkdown: tabContents[activeTab]
-      });
+        await exportDocumentToPdf({
+          courseCode: course.id,
+          courseTitle: course.title,
+          lessonId: selectedLessonId,
+          lessonTitle: currentLessonTitle || selectedLessonId,
+          tab: activeTab,
+          tabDisplayName: exportTabName,
+          version: activeVer?.versionNumber,
+          rawMarkdown: tabContents[activeTab]
+        });
+      }
     } catch (err) {
       console.error('Failed to export PDF:', err);
       alert('Failed to generate PDF. Please check the browser console for details.');
@@ -634,9 +900,27 @@
     }
   }
 
-  onMount(() => {
-    loadPrompts();
-    loadCourse();
+  onMount(async () => {
+    await loadPrompts();
+
+    const urlScope = $page.url.searchParams.get('scope');
+    const urlTab = $page.url.searchParams.get('tab');
+    if (urlTab) {
+      if (urlTab === 'notes') activeTab = 'lesson';
+      else if (['lesson', 'summary', 'cheatsheet', 'test'].includes(urlTab)) {
+        activeTab = urlTab as any;
+      }
+    }
+
+    if (urlScope === 'course') {
+      isCourseScope = true;
+      await loadCourse();
+      await loadCourseDocument(activeTab);
+    } else {
+      await loadCourse();
+    }
+
+    startQueueFeedback();
     if (typeof window !== 'undefined') {
       window.addEventListener('popstate', handlePopState);
     }
@@ -646,6 +930,7 @@
     if (typeof window !== 'undefined') {
       window.removeEventListener('popstate', handlePopState);
     }
+    stopQueueFeedback();
   });
 
   // Current lesson title
@@ -664,9 +949,9 @@
 <Header
   courseId={course?.id}
   courseTitle={course?.title}
-  lessonTitle={currentLessonTitle}
+  lessonTitle={isCourseScope ? 'Complete Course' : currentLessonTitle}
   onLessonUpdated={(lId) => {
-    if (lId === selectedLessonId) {
+    if (!isCourseScope && lId === selectedLessonId) {
       loadLesson(selectedLessonId);
     }
   }}
@@ -690,57 +975,61 @@
         <LessonSelector
           {course}
           {selectedLessonId}
-          onSelectLesson={(id) => loadLesson(id)}
+          isCourseMode={isCourseScope}
+          onSelectLesson={(id) => selectLesson(id)}
+          onSelectCourseMode={() => selectCourseMode()}
         />
 
-        <div class="flex items-center space-x-1.5 shrink-0">
-          <button
-            onclick={() => { uploadModalMode = 'add'; isUploadModalOpen = true; }}
-            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs cursor-pointer"
-            title="Add new chapters / lessons to this course"
-          >
-            <Plus class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
-            <span>Add</span>
-          </button>
+        {#if !isCourseScope}
+          <div class="flex items-center space-x-1.5 shrink-0">
+            <button
+              onclick={() => { uploadModalMode = 'add'; isUploadModalOpen = true; }}
+              class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs cursor-pointer"
+              title="Add new chapters / lessons to this course"
+            >
+              <Plus class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
+              <span>Add</span>
+            </button>
 
-          <button
-            onclick={() => { uploadModalMode = 'replace'; isUploadModalOpen = true; }}
-            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs cursor-pointer"
-            title="Replace current chapter ({currentLessonTitle || selectedLessonId}) with a new file upload"
-          >
-            <RefreshCw class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
-            <span>Replace</span>
-          </button>
+            <button
+              onclick={() => { uploadModalMode = 'replace'; isUploadModalOpen = true; }}
+              class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-xs font-medium text-stone-700 dark:text-stone-300 transition shadow-2xs cursor-pointer"
+              title="Replace current chapter ({currentLessonTitle || selectedLessonId}) with a new file upload"
+            >
+              <RefreshCw class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
+              <span>Replace</span>
+            </button>
 
-          <button
-            onclick={queueAllMissing}
-            disabled={isQueueingMissing}
-            class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-xs font-medium text-amber-900 dark:text-amber-200 transition shadow-2xs cursor-pointer disabled:opacity-50"
-            title="Scan course and queue all ungenerated study sheets (Summary, Cheatsheet, Test) in background"
-          >
-            {#if isQueueingMissing}
-              <Loader2 class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-spin" />
-              <span>Queueing...</span>
-            {:else}
-              <Sparkles class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-              <span>Generate Missing</span>
-            {/if}
-          </button>
-        </div>
+            <button
+              onclick={queueAllMissing}
+              disabled={isQueueingMissing}
+              class="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-xs font-medium text-amber-900 dark:text-amber-200 transition shadow-2xs cursor-pointer disabled:opacity-50"
+              title="Scan course and queue all ungenerated study sheets (Summary, Cheatsheet, Test) in background"
+            >
+              {#if isQueueingMissing}
+                <Loader2 class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 animate-spin" />
+                <span>Queueing...</span>
+              {:else}
+                <Sparkles class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                <span>Generate Missing</span>
+              {/if}
+            </button>
+          </div>
+        {/if}
       </div>
 
-      <!-- Middle: Study Tabs (Full | Summary | Cheatsheet | Test) -->
+      <!-- Middle: Study Tabs (Notes | Summary | Cheatsheet | Test) -->
       <div class="inline-flex rounded-lg border border-stone-200 dark:border-stone-800 p-0.5 bg-stone-100 dark:bg-stone-800/70 text-xs font-medium">
         <button
-          onclick={() => { activeTab = 'lesson'; isEditing = false; }}
+          onclick={() => switchTab('lesson')}
           class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'lesson' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'}"
         >
           <BookOpen class="w-3.5 h-3.5" />
-          <span>Full Lesson</span>
+          <span>Notes</span>
         </button>
 
         <button
-          onclick={() => { activeTab = 'summary'; isEditing = false; }}
+          onclick={() => switchTab('summary')}
           class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'summary' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'}"
         >
           <Sparkles class="w-3.5 h-3.5" />
@@ -748,7 +1037,7 @@
         </button>
 
         <button
-          onclick={() => { activeTab = 'cheatsheet'; isEditing = false; }}
+          onclick={() => switchTab('cheatsheet')}
           class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'cheatsheet' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'}"
         >
           <ListCollapse class="w-3.5 h-3.5" />
@@ -756,7 +1045,7 @@
         </button>
 
         <button
-          onclick={() => { activeTab = 'test'; isEditing = false; }}
+          onclick={() => switchTab('test')}
           class="flex items-center space-x-1.5 px-3 py-1 rounded-md transition {activeTab === 'test' ? 'bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 shadow-2xs font-semibold' : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'}"
         >
           <CheckCircle2 class="w-3.5 h-3.5" />
@@ -767,7 +1056,7 @@
 
     <!-- Main Workspace Content Area -->
     <div class="flex-1 overflow-y-auto p-4 sm:p-8 max-w-5xl mx-auto w-full">
-      {#if isLoadingLesson}
+      {#if isCourseScope ? isLoadingCourseDoc : isLoadingLesson}
         <div class="h-64 flex items-center justify-center">
           <Loader2 class="w-6 h-6 animate-spin text-stone-300" />
         </div>
@@ -776,14 +1065,15 @@
         {#if activeTab !== 'lesson' && !isEditing}
           <PromptCard
             prompt={parsedActiveTab.frontmatter.prompt || defaultPromptForActiveTab}
-            tabName={tabDisplayName}
-            versions={currentTabVersions}
-            {activeVersionId}
-            isGenerating={isGeneratingAI}
+            defaultPrompt={defaultPromptForActiveTab}
+            tabName={isCourseScope ? `Course ${tabDisplayName}` : tabDisplayName}
+            versions={isCourseScope ? [] : currentTabVersions}
+            activeVersionId={isCourseScope ? '' : activeVersionId}
+            isGenerating={isCourseScope ? isGeneratingCourseDoc : isTabGenerating}
             onChangePrompt={handlePromptChange}
-            onRegenerate={triggerAIGeneration}
-            onSelectVersion={handleSelectVersion}
-            onCreateNewVersion={handleCreateNewVersion}
+            onRegenerate={isCourseScope ? () => generateCourseDocument(activeTab) : triggerAIGeneration}
+            onSelectVersion={isCourseScope ? undefined : handleSelectVersion}
+            onCreateNewVersion={isCourseScope ? undefined : handleCreateNewVersion}
             onResetPrompt={() => handlePromptChange(defaultPromptForActiveTab)}
           />
         {/if}
@@ -837,22 +1127,33 @@
                 {/if}
               </button>
 
-              <button
-                onclick={() => (isEditing = true)}
-                class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 dark:border-stone-700 bg-white/95 dark:bg-stone-900/95 backdrop-blur-sm hover:bg-white dark:hover:bg-stone-800 text-xs font-medium text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 shadow-xs hover:shadow-sm transition cursor-pointer"
-                title="Edit content"
-              >
-                <Edit3 class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
-                <span>Edit</span>
-              </button>
+              {#if !(isCourseScope && activeTab === 'lesson')}
+                <button
+                  onclick={() => (isEditing = true)}
+                  class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-stone-200/90 dark:border-stone-700 bg-white/95 dark:bg-stone-900/95 backdrop-blur-sm hover:bg-white dark:hover:bg-stone-800 text-xs font-medium text-stone-700 dark:text-stone-300 hover:text-stone-900 dark:hover:text-stone-100 shadow-xs hover:shadow-sm transition cursor-pointer"
+                  title="Edit content"
+                >
+                  <Edit3 class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
+                  <span>Edit</span>
+                </button>
+              {/if}
             {/if}
           </div>
         </div>
 
         <!-- Main Card -->
         <div class="relative bg-white dark:bg-stone-900 rounded-2xl border border-stone-200 dark:border-stone-800 shadow-2xs group">
-
-          {#if isEditing}
+          {#if isCourseScope && isGeneratingCourseDoc}
+            <div class="h-64 flex flex-col items-center justify-center space-y-3 p-8 text-center">
+              <Loader2 class="w-7 h-7 animate-spin text-amber-500" />
+              <div class="text-sm font-medium text-stone-800 dark:text-stone-200">
+                Generating Course {tabDisplayName}...
+              </div>
+              <p class="text-xs text-stone-500 dark:text-stone-400 max-w-sm">
+                Synthesizing lesson {activeTab}s across all units with AI. This may take 15–30 seconds.
+              </p>
+            </div>
+          {:else if isEditing}
             <!-- CodeMirror Editor (direct raw markdown with YAML frontmatter) -->
             <div class="p-4 sm:p-6 pt-16">
               <div class="h-[calc(100vh-16rem)]">
@@ -867,9 +1168,11 @@
           {:else if activeTab === 'test'}
             <!-- Practice Test Interactive Runner -->
             <div class="p-6 sm:p-10">
-              <QuizRunner
-                testMarkdown={parsedActiveTab.body}
-              />
+              {#key `${quizRunnerKey}-${parsedActiveTab.body}`}
+                <QuizRunner
+                  testMarkdown={parsedActiveTab.body}
+                />
+              {/key}
             </div>
           {:else}
             <!-- Markdown Reader View -->
@@ -887,7 +1190,7 @@
     </div>
   </div>
 
-  {#if !isEditing}
+  {#if !isEditing && !isCourseScope}
     <SelectionToolbar
       containerSelector=".markdown-body"
       isGenerating={isGeneratingAI}

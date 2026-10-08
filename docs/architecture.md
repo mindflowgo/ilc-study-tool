@@ -272,6 +272,14 @@ Packaged desktop builds have no SvelteKit server, and the dev/web app has no com
 - **Hardened spawn** (`tauri/src/lib.rs`): per-platform binary lookup (`server`/`server.exe` in resources and beside the executable, bun fallback including `%USERPROFILE%\.bun\bin\bun.exe`), stdout/stderr captured to `<data_dir>/backend.log`, spawn failures logged, and the main window is held back until the backend port answers (10s cap) so the UI never appears before the API is reachable.
 - **Loopback-only**: the sidecar binds `127.0.0.1` and emits CORS headers solely for recognized origins (localhost/127.0.0.1 ports and the Tauri webview origins `tauri://localhost` / `http://tauri.localhost`).
 
+### 7.1b Windows Portable Build (`bun run tauri:build:portable`)
+Runs **on Windows only** (gated with a clear message elsewhere). Produces in `tauri/target/release/bundle/portable/`:
+- **Primary artifact**: `Course-Study-Tool-<version>-portable-win-x64.zip` (+ `.sha256`) containing the renamed release exe, `server.exe`, and `README-Portable.txt` (WebView2 requirement, data location, update instructions). Unzip anywhere and run — data lives in `data/` beside the exe.
+- **Secondary artifact** (only if NSIS/makensis is present): a single-file silent launcher. Convenience only — unsigned NSIS self-extractors are a common antivirus false-positive pattern and re-extract ~90MB on every launch; distribute the zip to other machines.
+- The build skips the frontend `beforeBuildCommand` via a temporary `tauri.portable.conf.json` override (the caller builds it once).
+
+Data-directory resolution order (Rust, `get_default_data_dir` / `find_course_dir`): settings `data_dir` → `DATA_DIR` env → `cwd/data` → `cwd/../data` → **`<exe-dir>/data`** (portable layout; checked after cwd so the NSIS launcher's `$EXEDIR` cwd still wins over its `%TEMP%` extraction dir) → app-data dir.
+
 ### 7.2 Verification gates (root scripts)
 - `bun run check` — app svelte-check **plus** `tsc --noEmit` over the sidecar and shared server modules.
 - `bun run test` — three suites: `scripts/api-contract.ts` (response-shape contracts), `scripts/sidecar-e2e.ts` (ingest → save → save-as-new-version → course-docs → theme → backup roundtrip against a live sidecar on scratch data), and the PDF pipeline smoke test.
@@ -418,8 +426,70 @@ Adapted from the architecture in `nuza`, the CodeMirror editor (`app/src/lib/edi
    - Respects Obsidian pipe sizing (`![alt|300](url)`, `![alt|50%](url)`).
 7. **YAML Frontmatter (`---`)**:
    - Renders as a structured Properties form displaying key-value metadata, with inline editing, deletion, and property additions. Placing the cursor inside reveals the raw YAML text.
+---
 
+## 13. Course-Wide Synthesis & Document Architecture
 
+In addition to lesson-by-lesson study materials, the platform provides complete course-wide synthesis documents (`course.summary.md`, `course.cheatsheet.md`, `course.test.md`) accessible via the **Complete Course** scope in the workspace header.
 
+### 13.1 Filesystem Layout & Storage Model
+Course-wide documents are stored at the root of the course directory:
+- `data/courses/<course_id>/course.summary.md`: Comprehensive cross-unit executive summary and curriculum synthesis.
+- `data/courses/<course_id>/course.cheatsheet.md`: Unified master quick-reference table of core terminology, legal principles, and formulas.
+- `data/courses/<course_id>/course.test.md`: Full course practice exam spanning all units, aligned with Ontario KICA curriculum categories.
 
+Unlike lesson-level study materials which support multi-version branching (`.summary-2.md`, etc.), course-level documents are maintained as single consolidated artifacts (`versions.length === 0`). Re-generating a course-level document directly updates the master artifact without prompting for version branching.
+
+### 13.2 Curated Aggregation Engine (`CourseService.buildAggregatedPayload`)
+Generating high-yield course-wide materials requires synthesizing insights across all units without overloading the LLM's context window with repetitive lesson text or navigational boilerplate.
+
+1. **Curated-Only Sourcing Principle**:
+   - The aggregation engine **strictly excludes uncurated raw course materials (`.lesson.md`)**.
+   - Synthesis is constructed exclusively from student-curated and refined study materials (`.summary`, `.cheatsheet`, and `.test.md`).
+2. **Selective Type Priority**:
+   - **For Course Practice Tests (`type === 'test'`)**:
+     - Gathers the latest `.summary.md` (or highest version `.summary-N.md`) for each lesson.
+     - Falls back to `.cheatsheet.md` if no summary is available.
+     - Scans existing lesson practice tests (`.test.md`) and extracts question prompts and covered quiz topics into an `#### Existing Lesson Quiz Coverage` section. This provides the LLM with direct visibility into already-tested competencies to ensure comprehensive cross-unit coverage without duplicating lesson-level questions.
+   - **For Course Summaries (`type === 'summary'`)**:
+     - Collects the latest lesson summaries, falling back to cheatsheets.
+   - **For Course Cheatsheets (`type === 'cheatsheet'`)**:
+     - Collects the latest lesson cheatsheets, falling back to summaries.
+3. **Context Window & Character Budgeting**:
+   - YAML frontmatter is stripped via `parseFrontmatter` so only clean Markdown content enters the prompt payload.
+   - Per-lesson character limits are enforced (`budgetLessonContent`):
+     - **Test synthesis**: 2,200 characters per lesson.
+     - **Summary synthesis**: 3,000 characters per lesson.
+     - **Cheatsheet synthesis**: 2,500 characters per lesson.
+   - If no curated study materials exist across any lesson in the course, the engine returns an empty payload, prompting a descriptive error instructing the student to generate or curate lesson summaries first.
+
+### 13.3 YAML Frontmatter Prompt Provenance & Single Source of Truth
+Every generated course artifact preserves its exact generation instructions in YAML frontmatter (`--- ... ---`):
+
+```markdown
+---
+prompt: |
+  # Course-Wide Practice Exam Generation Prompt
+  Generate an extensive 24-question Ontario KICA-aligned exam...
+type: course_test
+updatedAt: '2026-10-08'
+---
+
+# Course Practice Test: COU2M
+...
+```
+
+1. **Definitive Provenance**:
+   - The YAML frontmatter `prompt` field is the single source of truth for the exact prompt instructions used to produce that specific document.
+   - When a user customizes a prompt in the UI (for instance, changing the question count from 12 to 24), the backend explicitly serializes `prompt: systemPrompt` *after* any parsed frontmatter defaults, guaranteeing that custom user prompts are never clobbered by LLM-emitted frontmatter blocks.
+2. **Frontend Synchronization & Diffing**:
+   - In `PromptCard.svelte` and `+page.svelte`, the active prompt is loaded directly from the document's frontmatter.
+   - A `defaultPrompt` prop supplies the base prompt template. The UI computes `isModified = cardPrompt.trim() !== defaultPrompt.trim()`, allowing the "Prompt modified" badge and "Reset" action to accurately reflect customizations against default templates.
+   - Upon successful generation, the response Markdown (with updated frontmatter) immediately updates both `tabContents` and `originalContents`, keeping the editor, prompt card, and quiz runner in sync.
+
+### 13.4 Resilient LLM Execution & Extended Timeouts
+Synthesizing multiple units into high-question-count exams (e.g., 24 KICA questions + detailed explanations) requires extended generation windows:
+- `LLMService.generateResult` accepts an optional `timeoutMs` parameter governing both the `AbortController` and the `Promise.race` deadline timer (defaulting to 90 seconds).
+- Course-wide generation requests (`POST /api/courses/:id/course-docs`) supply a dedicated **180-second (3-minute) timeout** to ensure complex synthesis completes reliably without premature timeouts.
+- The UI reflects asynchronous status with inline spinners (`<Loader2 class="animate-spin" />`) and disabled button states, resetting interactive quiz state cleanly upon document replacement.
 

@@ -17,88 +17,15 @@
     Folder,
     Loader2
   } from 'lucide-svelte';
-  import { exportDocumentToPdf } from '$lib/pdf/exportPdf';
   import { apiFetch, isTauriEnvironment } from '$lib/api';
 
   let courses: CourseManifest[] = $state([]);
   let isLoading = $state(true);
   let searchQuery = $state('');
   let isUploadModalOpen = $state(false);
-  let activeDownloads: Record<string, string | null> = $state({});
 
-  async function handleDownloadCoursePdf(
-    course: CourseManifest,
-    type: 'notes' | 'summary' | 'cheatsheet' | 'test'
-  ) {
-    const key = `${course.id}:${type}`;
-    if (activeDownloads[key]) return;
-    activeDownloads[key] = 'loading';
-
-    try {
-      if (type === 'notes') {
-        const res = await apiFetch(`/api/courses/${course.id}/course-docs?type=notes`);
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || errData.error || 'Failed to assemble course notes');
-        }
-        const data = await res.json();
-        if (!data.markdown || !data.markdown.trim()) {
-          throw new Error('No lesson notes found for this course');
-        }
-
-        await exportDocumentToPdf({
-          courseCode: course.id,
-          courseTitle: course.title,
-          lessonId: 'Course',
-          lessonTitle: 'Complete Course Notes',
-          tab: 'lesson',
-          tabDisplayName: 'Complete Notes',
-          rawMarkdown: data.markdown
-        });
-      } else {
-        // summary, cheatsheet, test
-        const res = await apiFetch(`/api/courses/${course.id}/course-docs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type })
-        });
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.message || errData.error || `Failed to generate course ${type}`);
-        }
-        const data = await res.json();
-        if (!data.markdown || !data.markdown.trim()) {
-          throw new Error(`Generated course ${type} was empty`);
-        }
-
-        // Update local courseDocs state
-        if (!course.courseDocs) {
-          course.courseDocs = { summary: false, cheatsheet: false, test: false };
-        }
-        course.courseDocs[type] = true;
-
-        const displayTitles: Record<string, { lessonTitle: string; tabDisplayName: string }> = {
-          summary: { lessonTitle: 'Comprehensive Course Summary', tabDisplayName: 'Course Summary' },
-          cheatsheet: { lessonTitle: 'Master Course Cheatsheet', tabDisplayName: 'Course Cheatsheet' },
-          test: { lessonTitle: 'Final Course Practice Exam', tabDisplayName: 'Course Practice Test' }
-        };
-
-        await exportDocumentToPdf({
-          courseCode: course.id,
-          courseTitle: course.title,
-          lessonId: 'Course',
-          lessonTitle: displayTitles[type].lessonTitle,
-          tab: type,
-          tabDisplayName: displayTitles[type].tabDisplayName,
-          rawMarkdown: data.markdown
-        });
-      }
-    } catch (err: any) {
-      console.error(`Failed to export course ${type}:`, err);
-      alert(err?.message || `Failed to download course ${type} PDF`);
-    } finally {
-      delete activeDownloads[key];
-    }
+  function openCourseDoc(courseId: string, tab: 'lesson' | 'summary' | 'cheatsheet' | 'test') {
+    goto(`/courses/${courseId}?scope=course&tab=${tab}`);
   }
 
   async function openCourseFolder(courseId: string, path?: string) {
@@ -234,7 +161,7 @@
           <!-- Bottom Footer -->
           <div class="mt-1 pt-2 border-t border-stone-100 dark:border-stone-800">
             <div class="flex items-center justify-between">
-              <div class="text-xs text-stone-400 dark:text-stone-500 mt-0.5">Download Course PDFs</div>
+              <div class="text-xs text-stone-400 dark:text-stone-500 mt-0.5">Complete Course</div>
               <button
                 type="button"
                 title="Open course folder"
@@ -254,85 +181,65 @@
               <!-- Notes -->
               <button
                 type="button"
-                title="Download complete course notes PDF"
+                title="View complete course notes"
                 onclick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  handleDownloadCoursePdf(course, 'notes');
+                  openCourseDoc(course.id, 'lesson');
                 }}
-                disabled={Boolean(activeDownloads[`${course.id}:notes`])}
-                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer disabled:opacity-50"
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer"
               >
-                {#if activeDownloads[`${course.id}:notes`]}
-                  <Loader2 class="w-3 h-3 animate-spin text-stone-600 dark:text-stone-400" />
-                {:else}
-                  <span>Notes</span>
-                {/if}
+                <span>Notes</span>
               </button>
 
               <!-- Summary -->
               <button
                 type="button"
-                title={course.courseDocs?.summary ? 'Download Course Summary PDF' : 'Generate & Download Course Summary PDF'}
+                title={course.courseDocs?.summary ? 'View Course Summary' : 'Generate Course Summary'}
                 onclick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  handleDownloadCoursePdf(course, 'summary');
+                  openCourseDoc(course.id, 'summary');
                 }}
-                disabled={Boolean(activeDownloads[`${course.id}:summary`])}
-                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer disabled:opacity-50 relative"
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer relative"
               >
-                {#if activeDownloads[`${course.id}:summary`]}
-                  <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
-                {:else}
-                  <span>Summary</span>
-                  {#if course.courseDocs?.summary}
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
-                  {/if}
+                <span>Summary</span>
+                {#if course.courseDocs?.summary}
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
                 {/if}
               </button>
 
               <!-- Cheatsheet -->
               <button
                 type="button"
-                title={course.courseDocs?.cheatsheet ? 'Download Course Cheatsheet PDF' : 'Generate & Download Course Cheatsheet PDF'}
+                title={course.courseDocs?.cheatsheet ? 'View Master Course Cheatsheet' : 'Generate Course Cheatsheet'}
                 onclick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  handleDownloadCoursePdf(course, 'cheatsheet');
+                  openCourseDoc(course.id, 'cheatsheet');
                 }}
-                disabled={Boolean(activeDownloads[`${course.id}:cheatsheet`])}
-                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer disabled:opacity-50 relative"
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer relative"
               >
-                {#if activeDownloads[`${course.id}:cheatsheet`]}
-                  <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
-                {:else}
-                  <span>Cheatsheet</span>
-                  {#if course.courseDocs?.cheatsheet}
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
-                  {/if}
+                <span>Cheatsheet</span>
+                {#if course.courseDocs?.cheatsheet}
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
                 {/if}
               </button>
 
               <!-- Test -->
               <button
                 type="button"
-                title={course.courseDocs?.test ? 'Download Course Practice Test PDF' : 'Generate & Download Course Practice Test PDF'}
+                title={course.courseDocs?.test ? 'View Course Practice Test' : 'Generate Course Practice Test'}
                 onclick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  handleDownloadCoursePdf(course, 'test');
+                  openCourseDoc(course.id, 'test');
                 }}
-                disabled={Boolean(activeDownloads[`${course.id}:test`])}
-                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer disabled:opacity-50 relative"
+                class="flex items-center justify-center space-x-1 px-1.5 py-1 rounded bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 hover:text-stone-900 dark:hover:text-stone-100 text-stone-800 dark:text-stone-200 border border-stone-200 dark:border-stone-700 transition cursor-pointer relative"
               >
-                {#if activeDownloads[`${course.id}:test`]}
-                  <Loader2 class="w-3 h-3 animate-spin text-amber-600" />
-                {:else}
-                  <span>Test</span>
-                  {#if course.courseDocs?.test}
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
-                  {/if}
+                <span>Test</span>
+                {#if course.courseDocs?.test}
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Generated"></span>
                 {/if}
               </button>
             </div>

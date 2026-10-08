@@ -1,14 +1,22 @@
 <script lang="ts">
   import type { CourseManifest, CourseManifestLesson } from '$lib/parser/courseIngest';
-  import { ChevronLeft, ChevronRight, ChevronDown, Check, Search, FileText, Bookmark } from 'lucide-svelte';
+  import { ChevronLeft, ChevronRight, ChevronDown, Check, Search, FileText, Bookmark, GraduationCap } from 'lucide-svelte';
 
   interface Props {
     course: CourseManifest;
     selectedLessonId: string;
+    isCourseMode?: boolean;
     onSelectLesson: (lessonId: string) => void;
+    onSelectCourseMode?: () => void;
   }
 
-  let { course, selectedLessonId, onSelectLesson }: Props = $props();
+  let {
+    course,
+    selectedLessonId,
+    isCourseMode = false,
+    onSelectLesson,
+    onSelectCourseMode
+  }: Props = $props();
 
   let isOpen = $state(false);
   let searchQuery = $state('');
@@ -66,15 +74,17 @@
 </script>
 
 <div class="relative flex items-center space-x-1.5 text-xs">
-  <!-- Prev Button -->
-  <button
-    onclick={prevLesson}
-    disabled={!hasPrev}
-    title="Previous lesson"
-    class="p-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 dark:text-stone-300 transition"
-  >
-    <ChevronLeft class="w-4 h-4" />
-  </button>
+  <!-- Prev Button (hidden in Complete Course mode) -->
+  {#if !isCourseMode}
+    <button
+      onclick={prevLesson}
+      disabled={!hasPrev}
+      title="Previous lesson"
+      class="p-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 dark:text-stone-300 transition"
+    >
+      <ChevronLeft class="w-4 h-4" />
+    </button>
+  {/if}
 
   <!-- Dropdown Trigger -->
   <div class="relative">
@@ -82,14 +92,19 @@
       onclick={toggleDropdown}
       class="flex items-center space-x-2 px-3 py-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-100 font-medium transition shadow-2xs max-w-[280px] sm:max-w-md"
     >
-      {#if currentLesson?.type === 'assignment'}
-        <Bookmark class="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+      {#if isCourseMode}
+        <GraduationCap class="w-3.5 h-3.5 text-stone-700 dark:text-stone-300 shrink-0" />
+        <span class="truncate">Complete Course</span>
       {:else}
-        <FileText class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400 shrink-0" />
+        {#if currentLesson?.type === 'assignment'}
+          <Bookmark class="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
+        {:else}
+          <FileText class="w-3.5 h-3.5 text-stone-500 dark:text-stone-400 shrink-0" />
+        {/if}
+        <span class="truncate">
+          {currentLesson ? currentLesson.title : 'Select a lesson'}
+        </span>
       {/if}
-      <span class="truncate">
-        {currentLesson ? currentLesson.title : 'Select a lesson'}
-      </span>
       <ChevronDown class="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 shrink-0 ml-1" />
     </button>
 
@@ -102,6 +117,25 @@
       ></div>
 
       <div class="absolute left-0 mt-1 w-80 sm:w-96 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-xl z-40 overflow-hidden flex flex-col max-h-[480px]">
+        <!-- Complete Course Option -->
+        <div class="p-1 border-b border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-850/50">
+          <button
+            onclick={() => {
+              if (onSelectCourseMode) onSelectCourseMode();
+              isOpen = false;
+            }}
+            class="w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition {isCourseMode ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 font-medium' : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}"
+          >
+            <div class="flex items-center space-x-2 truncate pr-2">
+              <GraduationCap class="w-3.5 h-3.5 shrink-0 {isCourseMode ? 'text-white dark:text-stone-900' : 'text-stone-500 dark:text-stone-400'}" />
+              <span class="font-medium">Complete Course</span>
+            </div>
+            {#if isCourseMode}
+              <Check class="w-3.5 h-3.5 shrink-0" />
+            {/if}
+          </button>
+        </div>
+
         <!-- Search bar -->
         <div class="p-2 border-b border-stone-100 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-850/50 flex items-center space-x-2">
           <Search class="w-3.5 h-3.5 text-stone-400 dark:text-stone-500 shrink-0" />
@@ -122,7 +156,7 @@
               </div>
               <div class="space-y-0.5">
                 {#each unit.lessons as lesson}
-                  {@const isSelected = lesson.id === selectedLessonId}
+                  {@const isSelected = !isCourseMode && lesson.id === selectedLessonId}
                   <button
                     onclick={() => selectAndClose(lesson.id)}
                     class="w-full text-left px-2.5 py-1.5 rounded flex items-center justify-between text-xs transition {isSelected ? 'bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 font-medium' : 'text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800'}"
@@ -156,13 +190,15 @@
     {/if}
   </div>
 
-  <!-- Next Button -->
-  <button
-    onclick={nextLesson}
-    disabled={!hasNext}
-    title="Next lesson"
-    class="p-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 dark:text-stone-300 transition"
-  >
-    <ChevronRight class="w-4 h-4" />
-  </button>
+  <!-- Next Button (hidden in Complete Course mode) -->
+  {#if !isCourseMode}
+    <button
+      onclick={nextLesson}
+      disabled={!hasNext}
+      title="Next lesson"
+      class="p-1.5 rounded border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-800 hover:bg-stone-50 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed text-stone-700 dark:text-stone-300 transition"
+    >
+      <ChevronRight class="w-4 h-4" />
+    </button>
+  {/if}
 </div>

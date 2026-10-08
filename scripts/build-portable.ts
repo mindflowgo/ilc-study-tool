@@ -1,122 +1,226 @@
+/**
+ * Windows portable build.
+ *
+ * Produces, in `tauri/target/release/bundle/portable/`:
+ *  1. PRIMARY: a version-stamped folder (main exe + server.exe + README)
+ *     plus a distributable .zip and .sha256 — unzip anywhere and run.
+ *  2. SECONDARY: a single-file NSIS launcher (silent self-extractor) for
+ *     convenience. NOTE: unsigned NSIS self-extractors are a common
+ *     antivirus false-positive pattern and re-extract ~90MB on every launch;
+ *     prefer distributing the zip on other machines.
+ *
+ * Must run on Windows (cargo MSVC toolchain + WebView2 target).
+ * Usage: bun run tauri:build:portable
+ */
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { zipSync } from 'fflate';
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const TAURI_DIR = path.join(ROOT_DIR, 'tauri');
 const TAURI_CONF_PATH = path.join(TAURI_DIR, 'tauri.conf.json');
 
-// 1. Read product information from tauri.conf.json
-if (!fs.existsSync(TAURI_CONF_PATH)) {
-  console.error(`[Portable Build] Could not find tauri.conf.json at: ${TAURI_CONF_PATH}`);
+// ---------------------------------------------------------------------------
+// Exported helpers (unit-testable without running the build)
+// ---------------------------------------------------------------------------
+
+/** Filesystem-safe base name (no spaces) for zip/artifact names. */
+export function sanitizeFileBase(name: string): string {
+  return name.trim().replace(/\s+/g, '-').replace(/[^a-zA-Z0-9._-]/g, '');
+}
+
+export function portableReadmeText(productName: string, version: string): string {
+  return `${productName} — Portable Edition (v${version})
+
+HOW TO USE
+  1. Unzip this folder anywhere (Desktop, USB stick, ...).
+  2. Run "${productName}.exe". Keep "server.exe" and the main .exe in the
+     same folder — the app spawns server.exe as its local backend.
+  3. All courses and data are stored in the "data" folder next to the exe.
+     To move the app to another machine: copy the whole folder, including
+     "data". To back up: copy or zip the "data" folder.
+
+REQUIREMENTS
+  - Windows 10/11 64-bit
+  - Microsoft WebView2 Runtime (pre-installed on current Windows 10/11;
+    if the app does not start, install it from:
+    https://developer.microsoft.com/microsoft-edge/webview2/)
+
+UPDATING
+  Replace everything in the folder EXCEPT the "data" folder.
+
+TROUBLESHOOTING
+  - If the window takes a moment to appear: the app waits for its local
+    backend to start (usually < 1 second).
+  - Backend logs: data/backend.log
+`;
+}
+
+/** Recursively zips `sourceDir` into `outPath`, wrapping entries in `entryPrefix/`. */
+export function zipDirectory(sourceDir: string, outPath: string, entryPrefix: string): void {
+  const files: Record<string, Uint8Array> = {};
+  const walk = (absDir: string, relPrefix: string): void => {
+    for (const entry of fs.readdirSync(absDir, { withFileTypes: true })) {
+      const absPath = path.join(absDir, entry.name);
+      const relPath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        walk(absPath, relPath);
+      } else if (entry.isFile()) {
+        files[relPath] = new Uint8Array(fs.readFileSync(absPath));
+      }
+    }
+  };
+  walk(sourceDir, entryPrefix);
+  fs.writeFileSync(outPath, zipSync(files, { level: 6 }));
+}
+
+export function sha256File(filePath: string): string {
+  const hasher = new Bun.CryptoHasher('sha256');
+  hasher.update(fs.readFileSync(filePath));
+  return hasher.digest('hex');
+}
+
+// ---------------------------------------------------------------------------
+// Build pipeline
+// ---------------------------------------------------------------------------
+
+function fail(message: string): never {
+  console.error(`[Portable Build] ${message}`);
   process.exit(1);
 }
 
-const tauriConf = JSON.parse(fs.readFileSync(TAURI_CONF_PATH, 'utf-8'));
-const productName: string = tauriConf.productName || 'Course Study Tool';
-const version: string = tauriConf.version || '0.1.0';
-
-console.log(`[Portable Build] Preparing portable build for ${productName} v${version}...`);
-
-// 2. Locate makensis.exe
-function findMakeNsis(): string | null {
-  // Check PATH first
-  const whichCmd = process.platform === 'win32' ? 'where.exe' : 'which';
-  const checkPath = spawnSync(whichCmd, ['makensis'], { encoding: 'utf-8' });
-  if (checkPath.status === 0 && checkPath.stdout) {
-    const found = checkPath.stdout.trim().split(/\r?\n/)[0];
-    if (found && fs.existsSync(found)) return found;
-  }
-
-  // Check Tauri's downloaded NSIS on Windows
-  const localAppData = process.env.LOCALAPPDATA;
-  if (localAppData) {
-    const tauriNsis = path.join(localAppData, 'tauri', 'NSIS', 'makensis.exe');
-    if (fs.existsSync(tauriNsis)) return tauriNsis;
-  }
-
-  // Check standard installation paths
-  const standardPaths = [
-    'C:\\Program Files (x86)\\NSIS\\makensis.exe',
-    'C:\\Program Files\\NSIS\\makensis.exe'
-  ];
-  for (const p of standardPaths) {
-    if (fs.existsSync(p)) return p;
-  }
-
-  return null;
-}
-
-const makensisPath = findMakeNsis();
-if (!makensisPath) {
-  console.error('[Portable Build] Error: makensis (NSIS) could not be located.');
-  console.error('Make sure NSIS is installed, or that Tauri has downloaded NSIS.');
-  process.exit(1);
-}
-
-console.log(`[Portable Build] Using NSIS compiler: ${makensisPath}`);
-
-// 3. Ensure backend sidecar is compiled (tauri/server.exe on Windows, tauri/server on unix)
-const serverBinaryName = process.platform === 'win32' ? 'server.exe' : 'server';
-const serverBinaryPath = path.join(TAURI_DIR, serverBinaryName);
-
-if (!fs.existsSync(serverBinaryPath)) {
-  console.log(`[Portable Build] Sidecar binary not found at ${serverBinaryPath}. Compiling sidecar...`);
-  const compileRes = spawnSync(
-    'bun',
-    ['build', '--compile', '--outfile', path.join(TAURI_DIR, 'server'), 'server/index.ts'],
-    { cwd: ROOT_DIR, stdio: 'inherit' }
-  );
-  if (compileRes.status !== 0) {
-    console.error('[Portable Build] Failed to compile server sidecar.');
+function main(): void {
+  if (process.platform !== 'win32') {
+    console.error('[Portable Build] This script produces a Windows portable build and must run on Windows.');
+    console.error(`You are on ${process.platform}. For this platform use: bun run tauri:build:mac`);
     process.exit(1);
   }
-}
 
-// 4. Build Tauri release executable (--no-bundle)
-console.log('[Portable Build] Building Tauri binary (release mode, no-bundle)...');
-const tauriBuildRes = spawnSync(
-  'bunx',
-  ['tauri', 'build', '--no-bundle'],
-  { cwd: TAURI_DIR, stdio: 'inherit', shell: true }
-);
+  // 1. Read product information from tauri.conf.json
+  if (!fs.existsSync(TAURI_CONF_PATH)) {
+    fail(`Could not find tauri.conf.json at: ${TAURI_CONF_PATH}`);
+  }
+  const tauriConf = JSON.parse(fs.readFileSync(TAURI_CONF_PATH, 'utf-8'));
+  const productName: string = tauriConf.productName || 'Course Study Tool';
+  const version: string = tauriConf.version || '0.1.0';
+  const fileBase = sanitizeFileBase(productName);
 
-if (tauriBuildRes.status !== 0) {
-  console.error('[Portable Build] Tauri build failed.');
-  process.exit(1);
-}
+  console.log(`[Portable Build] Preparing portable build for ${productName} v${version}...`);
 
-// 5. Verify built binaries
-const releaseDir = path.join(TAURI_DIR, 'target', 'release');
-const mainExeName = 'ilc-study-tool.exe';
-const mainExePath = path.join(releaseDir, mainExeName);
+  // 2. Locate makensis.exe (for the optional single-file launcher)
+  function findMakeNsis(): string | null {
+    const whichCmd = 'where.exe';
+    const checkPath = spawnSync(whichCmd, ['makensis'], { encoding: 'utf-8' });
+    if (checkPath.status === 0 && checkPath.stdout) {
+      const found = checkPath.stdout.trim().split(/\r?\n/)[0];
+      if (found && fs.existsSync(found)) return found;
+    }
+    const localAppData = process.env.LOCALAPPDATA;
+    if (localAppData) {
+      const tauriNsis = path.join(localAppData, 'tauri', 'NSIS', 'makensis.exe');
+      if (fs.existsSync(tauriNsis)) return tauriNsis;
+    }
+    const standardPaths = [
+      'C:\\Program Files (x86)\\NSIS\\makensis.exe',
+      'C:\\Program Files\\NSIS\\makensis.exe'
+    ];
+    for (const p of standardPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  }
 
-if (!fs.existsSync(mainExePath)) {
-  console.error(`[Portable Build] Main executable not found at: ${mainExePath}`);
-  process.exit(1);
-}
+  const makensisPath = findMakeNsis();
+  const wantSingleFileLauncher = makensisPath !== null;
+  if (!wantSingleFileLauncher) {
+    console.log('[Portable Build] makensis (NSIS) not found — skipping the optional single-file launcher (zip is the primary artifact anyway).');
+  } else {
+    console.log(`[Portable Build] Using NSIS compiler: ${makensisPath}`);
+  }
 
-// 6. Create standalone portable folder distribution (unpacked)
-const portableBundleDir = path.join(releaseDir, 'bundle', 'portable');
-fs.mkdirSync(portableBundleDir, { recursive: true });
+  // 3. Ensure the backend sidecar is compiled (tauri/server.exe)
+  const serverBinaryName = 'server.exe';
+  const serverBinaryPath = path.join(TAURI_DIR, serverBinaryName);
+  if (!fs.existsSync(serverBinaryPath)) {
+    console.log(`[Portable Build] Sidecar binary not found at ${serverBinaryPath}. Compiling sidecar...`);
+    const compileRes = spawnSync(
+      'bun',
+      ['build', '--compile', '--outfile', path.join(TAURI_DIR, 'server'), 'server/index.ts'],
+      { cwd: ROOT_DIR, stdio: 'inherit' }
+    );
+    if (compileRes.status !== 0) {
+      fail('Failed to compile server sidecar.');
+    }
+  }
 
-const unpackedAppDir = path.join(portableBundleDir, productName);
-fs.mkdirSync(unpackedAppDir, { recursive: true });
+  // 4. Build the Tauri release executable without bundling. The caller
+  //    (tauri:build:portable) already built the frontend, so the config
+  //    override skips beforeBuildCommand to avoid a redundant second build.
+  const portableConfPath = path.join(TAURI_DIR, 'tauri.portable.conf.json');
+  fs.writeFileSync(portableConfPath, JSON.stringify({ build: { beforeBuildCommand: '' } }, null, 2));
+  console.log('[Portable Build] Building Tauri binary (release mode, no-bundle)...');
+  const tauriBuildRes = spawnSync(
+    'bunx',
+    ['tauri', 'build', '--no-bundle', '--config', 'tauri.portable.conf.json'],
+    { cwd: TAURI_DIR, stdio: 'inherit', shell: true }
+  );
+  fs.unlinkSync(portableConfPath);
+  if (tauriBuildRes.status !== 0) {
+    fail('Tauri build failed.');
+  }
 
-fs.copyFileSync(mainExePath, path.join(unpackedAppDir, `${productName}.exe`));
-fs.copyFileSync(serverBinaryPath, path.join(unpackedAppDir, serverBinaryName));
-console.log(`[Portable Build] Created unpacked portable folder at: ${unpackedAppDir}`);
+  // 5. Verify built binaries (cargo names the binary after the package, not productName)
+  const releaseDir = path.join(TAURI_DIR, 'target', 'release');
+  const mainExeName = 'ilc-study-tool.exe';
+  const mainExePath = path.join(releaseDir, mainExeName);
+  if (!fs.existsSync(mainExePath)) {
+    fail(`Main executable not found at: ${mainExePath}`);
+  }
 
-// 7. Generate NSIS script for the single-file self-contained portable executable
-const nsisOutputDir = path.join(releaseDir, 'bundle', 'nsis');
-fs.mkdirSync(nsisOutputDir, { recursive: true });
+  // 6. Assemble the version-stamped portable folder (PRIMARY artifact)
+  const portableBundleDir = path.join(releaseDir, 'bundle', 'portable');
+  fs.mkdirSync(portableBundleDir, { recursive: true });
 
-const portableExeName = `${productName}_${version}_x64-portable.exe`;
-const portableExePath = path.join(nsisOutputDir, portableExeName);
-const iconPath = path.join(TAURI_DIR, 'icons', 'icon.ico');
-const tempNsiPath = path.join(TAURI_DIR, `temp_portable_${Date.now()}.nsi`);
+  const folderName = `${fileBase}-${version}-portable-win-x64`;
+  const unpackedAppDir = path.join(portableBundleDir, folderName);
+  fs.rmSync(unpackedAppDir, { recursive: true, force: true });
+  fs.mkdirSync(unpackedAppDir, { recursive: true });
 
-const nsiScript = `Unicode true
+  fs.copyFileSync(mainExePath, path.join(unpackedAppDir, `${productName}.exe`));
+  fs.copyFileSync(serverBinaryPath, path.join(unpackedAppDir, serverBinaryName));
+  fs.writeFileSync(path.join(unpackedAppDir, 'README-Portable.txt'), portableReadmeText(productName, version), 'utf-8');
+
+  // 7. Zip + checksum (primary distribution artifact)
+  const zipPath = path.join(portableBundleDir, `${folderName}.zip`);
+  console.log('[Portable Build] Zipping portable folder...');
+  zipDirectory(unpackedAppDir, zipPath, folderName);
+  const checksum = sha256File(zipPath);
+  fs.writeFileSync(`${zipPath}.sha256`, `${checksum}  ${path.basename(zipPath)}\n`, 'utf-8');
+
+  console.log('\n========================================');
+  console.log('✓ Portable Build Complete!');
+  console.log(`- Portable Zip (primary): ${zipPath}`);
+  console.log(`  sha256: ${checksum}`);
+  console.log(`- Unpacked Folder:        ${unpackedAppDir}`);
+
+  // 8. Optional single-file NSIS launcher (secondary; AV false-positive risk)
+  if (!wantSingleFileLauncher) {
+    console.log('- Single-file Launcher:   skipped (makensis not found)');
+    console.log('========================================\n');
+    return;
+  }
+
+  const nsisOutputDir = path.join(releaseDir, 'bundle', 'nsis');
+  fs.mkdirSync(nsisOutputDir, { recursive: true });
+
+  const portableExeName = `${fileBase}_${version}_x64-portable.exe`;
+  const portableExePath = path.join(nsisOutputDir, portableExeName);
+  const iconPath = path.join(TAURI_DIR, 'icons', 'icon.ico');
+  const tempNsiPath = path.join(TAURI_DIR, `temp_portable_${Date.now()}.nsi`);
+  const ns = (p: string) => p.replace(/\\/g, '\\\\');
+
+  const nsiScript = `Unicode true
 RequestExecutionLevel user
 SilentInstall silent
 AutoCloseWindow true
@@ -128,8 +232,8 @@ SetCompressor /SOLID lzma
 !insertmacro GetParameters
 
 Name "${productName}"
-OutFile "${portableExePath.replace(/\\/g, '\\\\')}"
-${fs.existsSync(iconPath) ? `Icon "${iconPath.replace(/\\/g, '\\\\')}"` : ''}
+OutFile "${ns(portableExePath)}"
+${fs.existsSync(iconPath) ? `Icon "${ns(iconPath)}"` : ''}
 
 VIProductVersion "${version}.0"
 VIAddVersionKey "ProductName" "${productName}"
@@ -142,12 +246,13 @@ VIAddVersionKey "OriginalFilename" "${portableExeName}"
 Section
   InitPluginsDir
   SetOutPath "$PLUGINSDIR"
-  File "${mainExePath.replace(/\\/g, '\\\\')}"
-  File "${serverBinaryPath.replace(/\\/g, '\\\\')}"
+  File "${ns(mainExePath)}"
+  File "${ns(serverBinaryPath)}"
 
   \${GetParameters} $R0
 
-  ; Preserve launcher directory as working directory so local data directories and relative paths work
+  ; Launcher directory as working directory so the portable data folder
+  ; resolves next to the launcher, not in the temp extraction dir
   SetOutPath "$EXEDIR"
   \${If} $R0 == ""
     ExecWait '"$PLUGINSDIR\\\\${mainExeName}"'
@@ -157,32 +262,31 @@ Section
 SectionEnd
 `;
 
-fs.writeFileSync(tempNsiPath, nsiScript, 'utf-8');
+  fs.writeFileSync(tempNsiPath, nsiScript, 'utf-8');
 
-try {
-  console.log(`[Portable Build] Compiling single-file portable executable with NSIS...`);
-  const nsisRun = spawnSync(makensisPath, [tempNsiPath], { stdio: 'inherit' });
-  if (nsisRun.status !== 0) {
-    console.error('[Portable Build] makensis compilation failed.');
-    process.exit(1);
+  try {
+    console.log('[Portable Build] Compiling single-file portable executable with NSIS...');
+    const nsisRun = spawnSync(makensisPath!, [tempNsiPath], { stdio: 'inherit' });
+    if (nsisRun.status !== 0) {
+      console.error('[Portable Build] makensis compilation failed (zip artifact above is still valid).');
+      process.exit(1);
+    }
+
+    const friendlyCopyPath = path.join(nsisOutputDir, `${productName} Portable.exe`);
+    fs.copyFileSync(portableExePath, friendlyCopyPath);
+
+    const stats = fs.statSync(portableExePath);
+    const sizeMb = (stats.size / (1024 * 1024)).toFixed(2);
+    console.log(`- Single-file Launcher:   ${portableExePath} (${sizeMb} MB)`);
+    console.log(`- Convenient Copy:        ${friendlyCopyPath}`);
+  } finally {
+    if (fs.existsSync(tempNsiPath)) {
+      fs.unlinkSync(tempNsiPath);
+    }
   }
-
-  // Also create a friendly-named copy in the nsis bundle and portable directories
-  const friendlyCopyPath = path.join(nsisOutputDir, `${productName} Portable.exe`);
-  fs.copyFileSync(portableExePath, friendlyCopyPath);
-  fs.copyFileSync(portableExePath, path.join(portableBundleDir, `${productName} Portable.exe`));
-
-  const stats = fs.statSync(portableExePath);
-  const sizeMb = (stats.size / (1024 * 1024)).toFixed(2);
-
-  console.log('\n========================================');
-  console.log('✓ Portable Build Complete!');
-  console.log(`- Portable Exe:    ${portableExePath} (${sizeMb} MB)`);
-  console.log(`- Convenient Copy: ${friendlyCopyPath}`);
-  console.log(`- Unpacked Folder: ${unpackedAppDir}`);
   console.log('========================================\n');
-} finally {
-  if (fs.existsSync(tempNsiPath)) {
-    fs.unlinkSync(tempNsiPath);
-  }
+}
+
+if (import.meta.main) {
+  main();
 }
